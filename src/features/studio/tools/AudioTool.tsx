@@ -18,17 +18,8 @@ import {
 } from '@/lib/video/ffmpegRun'
 import type { StudioTool } from '@/lib/search-params'
 
-const MUTE_VIDEO_ARGS = [
-  '-an',
-  '-c:v',
-  'libx264',
-  '-preset',
-  'fast',
-  '-crf',
-  '23',
-  '-movflags',
-  '+faststart',
-] as const
+/** Mute path: video-only re-encode using same defaults as `FFMPEG_MP4_TAIL`. */
+const MUTE_VIDEO_ARGS = ['-an', ...FFMPEG_MP4_TAIL] as const
 
 function formatErr(e: unknown): string {
   if (e instanceof Error) return e.message

@@ -63,14 +63,24 @@ export async function ffmpegCleanupInput(
   await ff.deleteFile(inName).catch(() => {})
 }
 
-/** H.264 + AAC, faststart — typical web export */
+/**
+ * H.264 + AAC + faststart — tuned for **ffmpeg.wasm** (much slower than native FFmpeg).
+ * Defaults favor **encode speed** over marginal quality: `veryfast` + CRF 26.
+ * For higher quality, use the Encode tool (preset/CRF) or raise these constants.
+ */
+export const FFMPEG_X264_PRESET_DEFAULT = 'veryfast' as const
+export const FFMPEG_X264_CRF_DEFAULT = '26'
+
 export const FFMPEG_MP4_TAIL = [
   '-c:v',
   'libx264',
   '-preset',
-  'fast',
+  FFMPEG_X264_PRESET_DEFAULT,
   '-crf',
-  '23',
+  FFMPEG_X264_CRF_DEFAULT,
+  /** wasm often benefits from explicit thread hint (no-op on some builds). */
+  '-threads',
+  '0',
   '-c:a',
   'aac',
   '-b:a',

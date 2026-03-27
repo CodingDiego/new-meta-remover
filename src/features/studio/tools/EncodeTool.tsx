@@ -9,6 +9,8 @@ import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
   assertVideoSize,
+  FFMPEG_X264_CRF_DEFAULT,
+  FFMPEG_X264_PRESET_DEFAULT,
   ffmpegCleanupInput,
   ffmpegReadOut,
   ffmpegWriteInput,
@@ -32,8 +34,8 @@ function EncodeControls({
 }) {
   const { file } = useStudioMedia()
   const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
-  const [crf, setCrf] = useState(23)
-  const [preset, setPreset] = useState('fast')
+  const [crf, setCrf] = useState(Number(FFMPEG_X264_CRF_DEFAULT))
+  const [preset, setPreset] = useState<string>(FFMPEG_X264_PRESET_DEFAULT)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
@@ -60,6 +62,8 @@ function EncodeControls({
           preset,
           '-crf',
           String(crf),
+          '-threads',
+          '0',
           '-c:a',
           'aac',
           '-b:a',
@@ -88,8 +92,9 @@ function EncodeControls({
   return (
     <div className="flex max-w-md flex-col gap-4">
       <p className="text-zinc-600 dark:text-zinc-400">
-        Re-codifica a MP4 (H.264 + AAC). CRF más bajo = mejor calidad. Cambia
-        códec y huella respecto al archivo fuente.
+        Re-codifica a MP4 (H.264 + AAC). Por defecto usa preset rápido y CRF más
+        alto que un export “cine” para acortar tiempo en el navegador. CRF más
+        bajo = mejor calidad, más lento.
       </p>
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
@@ -114,7 +119,10 @@ function EncodeControls({
           onChange={(e) => setPreset(e.target.value)}
           className="cursor-pointer rounded-md border border-zinc-300 bg-white px-2 py-1.5 dark:border-zinc-600 dark:bg-zinc-900"
         >
-          <option value="ultrafast">ultrafast</option>
+          <option value="ultrafast">ultrafast (más rápido, peor compresión)</option>
+          <option value="superfast">superfast</option>
+          <option value="veryfast">veryfast (recomendado en wasm)</option>
+          <option value="faster">faster</option>
           <option value="fast">fast</option>
           <option value="medium">medium</option>
           <option value="slow">slow</option>
