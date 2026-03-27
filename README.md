@@ -16,6 +16,14 @@ Other scripts: `bun run build`, `bun run preview`, `bun run lint`.
 
 **React Compiler** is enabled (see [React Compiler](https://react.dev/learn/react-compiler)); it affects dev/build performance.
 
+**Repository:** [github.com/CodingDiego/new-meta-remover](https://github.com/CodingDiego/new-meta-remover) (open source).
+
+---
+
+## Contributing
+
+We welcome issues and pull requests. Please read [**CONTRIBUTING.md**](./CONTRIBUTING.md) for guidelines: ground rules, dev setup (Bun), PR expectations, privacy/client-only constraints, and how to report security-sensitive problems.
+
 ---
 
 ## Technical reference (architecture & modules)

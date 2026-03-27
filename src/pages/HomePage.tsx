@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { formatBytes } from '@/lib/formatBytes'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
+import { REPO_CONTRIBUTING_URL, REPO_URL } from '@/lib/repo'
 
 export function HomePage() {
   const { file, items, activeId, mediaHydrated } = useStudioMedia()
@@ -23,6 +24,30 @@ export function HomePage() {
           <p className="mx-auto mt-4 max-w-xl text-pretty text-base leading-relaxed text-zinc-600 dark:text-zinc-400 sm:mx-0">
             Quita metadatos y edita vídeo en el cliente. Sin servidor: los
             archivos no salen de tu dispositivo hasta que exportes.
+          </p>
+          <p className="mx-auto mt-4 max-w-xl text-sm text-zinc-500 dark:text-zinc-500 sm:mx-0">
+            <span className="font-medium text-zinc-600 dark:text-zinc-400">
+              Código abierto:
+            </span>{' '}
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-emerald-700 underline-offset-2 hover:text-emerald-800 hover:underline dark:text-emerald-400 dark:hover:text-emerald-300"
+            >
+              GitHub
+            </a>
+            <span className="text-zinc-400 dark:text-zinc-600" aria-hidden>
+              {' · '}
+            </span>
+            <a
+              href={REPO_CONTRIBUTING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-emerald-700 underline-offset-2 hover:text-emerald-800 hover:underline dark:text-emerald-400 dark:hover:text-emerald-300"
+            >
+              Cómo contribuir
+            </a>
           </p>
         </header>
 
