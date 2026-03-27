@@ -251,6 +251,44 @@ export function MetadataTool({ tool }: MetadataToolProps) {
   const [afterLoading, setAfterLoading] = useState(false)
   const [afterError, setAfterError] = useState<string | null>(null)
 
+  const beforeFetchInput = useMemo(() => {
+    if (!file || !category) return null
+    return { file, category } as const
+  }, [file, category])
+
+  const afterFetchInput = useMemo(() => {
+    if (!resultBlob || !file || !category) return null
+    return { resultBlob, file, category } as const
+  }, [resultBlob, file, category])
+
+  const beforeInputRef = useRef<typeof beforeFetchInput | undefined>(undefined)
+  if (beforeInputRef.current !== beforeFetchInput) {
+    beforeInputRef.current = beforeFetchInput
+    if (!beforeFetchInput) {
+      setBeforeMeta(null)
+      setBeforeError(null)
+      setBeforeLoading(false)
+    } else {
+      setBeforeMeta(null)
+      setBeforeError(null)
+      setBeforeLoading(true)
+    }
+  }
+
+  const afterInputRef = useRef<typeof afterFetchInput | undefined>(undefined)
+  if (afterInputRef.current !== afterFetchInput) {
+    afterInputRef.current = afterFetchInput
+    if (!afterFetchInput) {
+      setAfterMeta(null)
+      setAfterError(null)
+      setAfterLoading(false)
+    } else {
+      setAfterMeta(null)
+      setAfterError(null)
+      setAfterLoading(true)
+    }
+  }
+
   const resultPreviewUrl = useMemo(() => {
     if (!resultBlob) return null
     return URL.createObjectURL(resultBlob)
@@ -263,15 +301,10 @@ export function MetadataTool({ tool }: MetadataToolProps) {
   }, [resultPreviewUrl])
 
   useEffect(() => {
-    if (!file || !category) {
-      setBeforeMeta(null)
-      setBeforeError(null)
-      return
-    }
+    if (!beforeFetchInput) return
     let cancelled = false
-    setBeforeLoading(true)
-    setBeforeError(null)
-    void readMetadataForCategory(file, category)
+    const { file: f, category: cat } = beforeFetchInput
+    void readMetadataForCategory(f, cat)
       .then((res) => {
         if (!cancelled) setBeforeMeta(res)
       })
@@ -284,19 +317,14 @@ export function MetadataTool({ tool }: MetadataToolProps) {
     return () => {
       cancelled = true
     }
-  }, [file, category])
+  }, [beforeFetchInput])
 
   useEffect(() => {
-    if (!resultBlob || !file || !category) {
-      setAfterMeta(null)
-      setAfterError(null)
-      return
-    }
+    if (!afterFetchInput) return
     let cancelled = false
-    setAfterLoading(true)
-    setAfterError(null)
-    const name = `procesado-${file.name}`
-    void readMetadataFromBlob(resultBlob, name, category)
+    const { resultBlob: blob, file: f, category: cat } = afterFetchInput
+    const name = `procesado-${f.name}`
+    void readMetadataFromBlob(blob, name, cat)
       .then((res) => {
         if (!cancelled) setAfterMeta(res)
       })
@@ -309,7 +337,7 @@ export function MetadataTool({ tool }: MetadataToolProps) {
     return () => {
       cancelled = true
     }
-  }, [resultBlob, file, category])
+  }, [afterFetchInput])
 
   const clearAll = useCallback(() => {
     clearStudioFiles()
