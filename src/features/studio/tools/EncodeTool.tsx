@@ -112,7 +112,7 @@ function EncodeControls({
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Preset
+          Presets
         </span>
         <select
           value={preset}
