@@ -91,39 +91,38 @@ export function StudioPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 text-zinc-100">
       <header className="sticky top-0 z-20 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div>
-            <nav className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-              <Link
-                to="/"
-                className="transition-colors hover:text-zinc-300"
-              >
-                Inicio
-              </Link>
-              <span aria-hidden>/</span>
-              <span className="font-medium text-zinc-300">Studio</span>
-              <span aria-hidden>/</span>
-              <span className="text-emerald-400/90">
-                {STUDIO_TOOL_LABEL[tool]}
-              </span>
-            </nav>
-            <h1 className="mt-1 font-serif text-2xl font-semibold tracking-tight text-white">
-              Editor de vídeo
-            </h1>
-            <p className="mt-0.5 text-sm text-zinc-500">
-              Herramientas locales · el archivo se mantiene al navegar
-            </p>
-          </div>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
+          <nav
+            className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[11px] leading-tight text-zinc-500 sm:text-xs"
+            aria-label="Migas de navegación"
+          >
+            <Link
+              to="/"
+              className="shrink-0 transition-colors hover:text-zinc-300"
+            >
+              Inicio
+            </Link>
+            <span aria-hidden className="text-zinc-600">
+              /
+            </span>
+            <span className="shrink-0 font-medium text-zinc-400">Studio</span>
+            <span aria-hidden className="text-zinc-600">
+              /
+            </span>
+            <span className="truncate font-medium text-emerald-400/95">
+              {STUDIO_TOOL_LABEL[tool]}
+            </span>
+          </nav>
           <Link
             to="/"
-            className="rounded-lg border border-zinc-700/80 bg-zinc-900/50 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-600 hover:bg-zinc-800"
+            className="shrink-0 rounded-md border border-zinc-700/80 bg-zinc-900/50 px-2.5 py-1 text-[11px] font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:bg-zinc-800 sm:text-xs"
           >
             ← Inicio
           </Link>
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-6xl space-y-5 px-4 py-5 sm:px-6">
         <StudioAssetBar />
 
         <div className="grid gap-2 lg:grid-cols-[1fr_auto] lg:items-start">
