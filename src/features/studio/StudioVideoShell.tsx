@@ -216,8 +216,8 @@ export function StudioVideoShell({
             onChange={(e) => onPick(e.target.files)}
           />
           <p className="text-xs text-zinc-500">
-            Un solo archivo por sesión de estudio; cambia de pestaña sin volver
-            a subirlo.
+            El archivo se guarda en este navegador (IndexedDB) y se mantiene al
+            ir al inicio o cambiar de herramienta.
           </p>
         </div>
       ) : !isVideo ? (

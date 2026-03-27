@@ -6,6 +6,8 @@ export type StudioMediaContextValue = {
   file: File | null
   setFile: (f: File | null) => void
   previewUrl: string | null
+  /** False until IndexedDB restore finishes (avoid flashing empty state). */
+  mediaHydrated: boolean
   /** Filename for downloads */
   nameMode: DownloadNameMode
   setNameMode: (m: DownloadNameMode) => void
