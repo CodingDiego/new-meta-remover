@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 
 import { buildDownloadFilename } from '@/lib/filename/buildDownloadFilename'
-import { useStudioMedia } from '@/features/studio/StudioMediaContext'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)

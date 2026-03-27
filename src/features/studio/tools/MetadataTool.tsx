@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { useStudioMedia } from '@/features/studio/StudioMediaContext'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import {
   readMetadataFromBlob,

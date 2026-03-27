@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
-import { useStudioMedia } from '@/features/studio/StudioMediaContext'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import {
   assertVideoSize,
