@@ -4,7 +4,7 @@
 @import "@fontsource-variable/nunito-sans";
 @import "@fontsource-variable/lora";
 
-@custom-variant dark (&:is(.dark *));
+@source "./**/*.{js,ts,jsx,tsx}";
 
 :root {
   --text: #6b6375;
@@ -95,7 +95,7 @@
 
   --sidebar-border: oklch(0.92 0.004 286.32);
 
-  --sidebar-ring: oklch(0.705 0.015 286.067)
+  --sidebar-ring: oklch(0.705 0.015 286.067);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -119,12 +119,10 @@
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  width: 100%;
   min-height: 100svh;
+  margin: 0;
+  text-align: start;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -257,8 +255,12 @@ code {
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;}
+    @apply border-border outline-ring/50;
+  }
   body {
-    @apply bg-background text-foreground;}
+    @apply bg-background text-foreground;
+  }
   html {
-    @apply font-sans;}}
+    @apply font-sans;
+  }
+}

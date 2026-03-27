@@ -1,4 +1,12 @@
-# React + TypeScript + Vite
+# new-meta-remover
+
+**Client-only** Vite app: React Router + nuqs + TanStack Query. No separate backend — no `fetch` to `/api/*`, no remote auth, no Blob upload pipeline. Processing (e.g. metadata stripping) runs in the browser.
+
+Typed env: `src/lib/env.ts` (`MODE` / `DEV` / `PROD` only).
+
+---
+
+## React + TypeScript + Vite (template notes)
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
