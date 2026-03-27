@@ -73,7 +73,7 @@ function FilePreview({ url, category, label }: PreviewProps) {
         <img
           src={url}
           alt=""
-          className="max-h-[min(360px,50vh)] w-full object-contain"
+          className="max-h-[min(78vh,920px)] w-full object-contain"
         />
       </div>
     )
@@ -88,7 +88,7 @@ function FilePreview({ url, category, label }: PreviewProps) {
         <video
           src={url}
           controls
-          className="max-h-[min(360px,50vh)] w-full"
+          className="max-h-[min(78vh,920px)] w-full object-contain"
         />
       </div>
     )

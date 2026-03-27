@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
-import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -23,9 +24,12 @@ function formatErr(e: unknown): string {
 
 export type ColorToolProps = { tool: StudioTool }
 
-function ColorControls() {
+function ColorControls({
+  onProcessed,
+}: {
+  onProcessed: (blob: Blob) => void
+}) {
   const { file } = useStudioMedia()
-  const download = useStudioDownload()
   const [brightness, setBrightness] = useState(0.08)
   const [contrast, setContrast] = useState(1.05)
   const [busy, setBusy] = useState(false)
@@ -53,14 +57,14 @@ function ColorControls() {
       await ffmpegCleanupInput(ff, inName)
       if (code !== 0) throw new Error('ffmpeg no pudo aplicar el ajuste.')
       const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      download(blob, '-color', '.mp4')
-      setHint('Listo.')
+      onProcessed(blob)
+      setHint('Listo. Revisa la pestaña «Después de procesar».')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
     }
-  }, [file, brightness, contrast, download])
+  }, [file, brightness, contrast, onProcessed])
 
   return (
     <div className="flex flex-col gap-4">
@@ -109,19 +113,30 @@ function ColorControls() {
         disabled={busy}
         onClick={() => void run()}
       >
-        {busy ? 'Procesando…' : 'Aplicar y descargar'}
+        {busy ? 'Procesando…' : 'Aplicar color y descargar'}
       </Button>
     </div>
   )
 }
 
 export function ColorTool({ tool }: ColorToolProps) {
+  const download = useStudioDownload()
+  const { processedUrl, setProcessedBlob, clearProcessed } =
+    useVideoCompareResult()
+
   return (
     <StudioVideoShell
       tool={tool}
-      description="Ajuste de brillo y contraste (filtro eq) con re-codificación."
+      description="Brillo y contraste con vista previa a pantalla completa antes de exportar."
+      compareResultUrl={processedUrl}
+      onClearCompare={clearProcessed}
     >
-      <ColorControls />
+      <ColorControls
+        onProcessed={(blob) => {
+          setProcessedBlob(blob)
+          download(blob, '-color', '.mp4')
+        }}
+      />
     </StudioVideoShell>
   )
 }

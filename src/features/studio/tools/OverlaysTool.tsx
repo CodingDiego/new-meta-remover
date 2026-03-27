@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
-import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { fetchFile } from '@ffmpeg/util'
 import {
   assertVideoSize,
@@ -41,9 +42,12 @@ async function watermarkPng(text: string): Promise<Blob> {
 
 export type OverlaysToolProps = { tool: StudioTool }
 
-function OverlayControls() {
+function OverlayControls({
+  onProcessed,
+}: {
+  onProcessed: (blob: Blob) => void
+}) {
   const { file } = useStudioMedia()
-  const download = useStudioDownload()
   const [text, setText] = useState('Marca de agua')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -81,19 +85,20 @@ function OverlayControls() {
       await ff.deleteFile('wm.png').catch(() => {})
       if (code !== 0) throw new Error('ffmpeg no pudo superponer la imagen.')
       const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      download(blob, '-overlay', '.mp4')
-      setHint('Listo.')
+      onProcessed(blob)
+      setHint('Marca aplicada. Revisa la pestaña «Después de procesar».')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
     }
-  }, [file, text, download])
+  }, [file, text, onProcessed])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
       <p className="text-zinc-600 dark:text-zinc-400">
-        Texto rasterizado en una banda y superpuesto abajo a la derecha.
+        El texto se dibuja en una banda y se superpone al vídeo; compara el
+        resultado en la pestaña.
       </p>
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
@@ -130,12 +135,23 @@ function OverlayControls() {
 }
 
 export function OverlaysTool({ tool }: OverlaysToolProps) {
+  const download = useStudioDownload()
+  const { processedUrl, setProcessedBlob, clearProcessed } =
+    useVideoCompareResult()
+
   return (
     <StudioVideoShell
       tool={tool}
-      description="Marca de agua de texto (imagen PNG generada) sobre el vídeo."
+      description="Marca de agua de texto (PNG) sobre el vídeo a pantalla completa."
+      compareResultUrl={processedUrl}
+      onClearCompare={clearProcessed}
     >
-      <OverlayControls />
+      <OverlayControls
+        onProcessed={(blob) => {
+          setProcessedBlob(blob)
+          download(blob, '-overlay', '.mp4')
+        }}
+      />
     </StudioVideoShell>
   )
 }

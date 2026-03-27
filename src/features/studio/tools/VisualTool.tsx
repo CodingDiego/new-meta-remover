@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
-import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -23,9 +24,12 @@ function formatErr(e: unknown): string {
 
 export type VisualToolProps = { tool: StudioTool }
 
-function VisualControls() {
+function VisualControls({
+  onProcessed,
+}: {
+  onProcessed: (blob: Blob) => void
+}) {
   const { file } = useStudioMedia()
-  const download = useStudioDownload()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
@@ -50,19 +54,22 @@ function VisualControls() {
       await ffmpegCleanupInput(ff, inName)
       if (code !== 0) throw new Error('ffmpeg no pudo completar el volteo.')
       const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      download(blob, '-visual', '.mp4')
-      setHint('Listo. Revisa la carpeta de descargas.')
+      onProcessed(blob)
+      setHint(
+        'Listo. Mira la pestaña «Después de procesar» y revisa la descarga.',
+      )
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
     }
-  }, [file, download])
+  }, [file, onProcessed])
 
   return (
     <div className="flex flex-col gap-3">
       <p className="text-zinc-600 dark:text-zinc-400">
-        Espejo horizontal del vídeo (re-codifica a H.264/AAC).
+        Espejo horizontal (re-codifica a H.264/AAC). Compara antes y después
+        arriba.
       </p>
       {error ? (
         <p
@@ -83,19 +90,30 @@ function VisualControls() {
         disabled={busy}
         onClick={() => void runFlip()}
       >
-        {busy ? 'Procesando…' : 'Voltear horizontalmente y descargar'}
+        {busy ? 'Procesando…' : 'Voltear y generar vista previa + descarga'}
       </Button>
     </div>
   )
 }
 
 export function VisualTool({ tool }: VisualToolProps) {
+  const download = useStudioDownload()
+  const { processedUrl, setProcessedBlob, clearProcessed } =
+    useVideoCompareResult()
+
   return (
     <StudioVideoShell
       tool={tool}
-      description="Transformaciones visuales básicas con FFmpeg en el navegador."
+      description="Transformaciones visuales con FFmpeg: revisa el vídeo completo arriba y compara el resultado."
+      compareResultUrl={processedUrl}
+      onClearCompare={clearProcessed}
     >
-      <VisualControls />
+      <VisualControls
+        onProcessed={(blob) => {
+          setProcessedBlob(blob)
+          download(blob, '-visual', '.mp4')
+        }}
+      />
     </StudioVideoShell>
   )
 }

@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
-import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -22,9 +23,12 @@ function formatErr(e: unknown): string {
 
 export type EncodeToolProps = { tool: StudioTool }
 
-function EncodeControls() {
+function EncodeControls({
+  onProcessed,
+}: {
+  onProcessed: (blob: Blob) => void
+}) {
   const { file } = useStudioMedia()
-  const download = useStudioDownload()
   const [crf, setCrf] = useState(23)
   const [preset, setPreset] = useState('fast')
   const [busy, setBusy] = useState(false)
@@ -65,8 +69,8 @@ function EncodeControls() {
         ])
         if (code !== 0) throw new Error('ffmpeg no pudo re-codificar.')
         const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-        download(blob, '-encode', '.mp4')
-        setHint('Exportación lista.')
+        onProcessed(blob)
+        setHint('Exportación lista. Compara calidad en la pestaña resultado.')
       } finally {
         await ffmpegCleanupInput(ff, inName).catch(() => {})
         ff.off('progress', onProg)
@@ -78,7 +82,7 @@ function EncodeControls() {
       setBusy(false)
       setLoadPct(null)
     }
-  }, [file, crf, preset, download])
+  }, [file, crf, preset, onProcessed])
 
   useEffect(() => {
     if (!busy) setLoadPct(null)
@@ -87,8 +91,8 @@ function EncodeControls() {
   return (
     <div className="flex max-w-md flex-col gap-4">
       <p className="text-zinc-600 dark:text-zinc-400">
-        Re-codifica a MP4 (H.264 + AAC). CRF más bajo = mejor calidad, archivo
-        más grande.
+        Re-codifica a MP4 (H.264 + AAC). CRF más bajo = mejor calidad. Cambia
+        códec y huella respecto al archivo fuente.
       </p>
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
@@ -146,12 +150,23 @@ function EncodeControls() {
 }
 
 export function EncodeTool({ tool }: EncodeToolProps) {
+  const download = useStudioDownload()
+  const { processedUrl, setProcessedBlob, clearProcessed } =
+    useVideoCompareResult()
+
   return (
     <StudioVideoShell
       tool={tool}
-      description="Exportación MP4 con control de calidad (CRF) y velocidad de codificación."
+      description="Control fino de exportación; la vista previa muestra el archivo de entrada completo."
+      compareResultUrl={processedUrl}
+      onClearCompare={clearProcessed}
     >
-      <EncodeControls />
+      <EncodeControls
+        onProcessed={(blob) => {
+          setProcessedBlob(blob)
+          download(blob, '-encode', '.mp4')
+        }}
+      />
     </StudioVideoShell>
   )
 }

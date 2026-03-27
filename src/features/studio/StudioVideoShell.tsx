@@ -1,7 +1,9 @@
-import { useCallback, useId, type ReactNode } from 'react'
+import { useCallback, useId, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { formatBytes, formatDurationSeconds } from '@/lib/formatBytes'
+import { getMaxVideoBytes } from '@/lib/video/ffmpegRun'
 import {
   detectCategory,
   type FileCategory,
@@ -26,11 +28,16 @@ const TOOL_LABELS: Record<string, string> = {
   encode: 'Codificar',
 }
 
+const PREVIEW_MAX_H = 'min(78vh, 920px)'
+
 export type StudioVideoShellProps = {
   tool: StudioTool
   title?: string
   description: string
   children: ReactNode
+  /** Object URL of last FFmpeg output — enables Original / Resultado tabs */
+  compareResultUrl?: string | null
+  onClearCompare?: () => void
 }
 
 export function StudioVideoShell({
@@ -38,24 +45,60 @@ export function StudioVideoShell({
   title,
   description,
   children,
+  compareResultUrl = null,
+  onClearCompare,
 }: StudioVideoShellProps) {
   const inputId = useId()
+  const shellRef = useRef<HTMLDivElement>(null)
   const { file, setFile, previewUrl } = useStudioMedia()
   const category = file ? detectCategory(file) : null
   const isVideo = category === 'video'
+
+  const [previewTab, setPreviewTab] = useState<'original' | 'result'>(
+    'original',
+  )
+  const [durationSec, setDurationSec] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (compareResultUrl) setPreviewTab('result')
+  }, [compareResultUrl])
+
+  useEffect(() => {
+    if (!compareResultUrl) setPreviewTab('original')
+  }, [compareResultUrl])
 
   const onPick = useCallback(
     (list: FileList | null) => {
       const f = list?.[0] ?? null
       setFile(f)
+      onClearCompare?.()
     },
-    [setFile],
+    [setFile, onClearCompare],
   )
+
+  const activeVideoSrc =
+    previewTab === 'result' && compareResultUrl
+      ? compareResultUrl
+      : previewUrl
+
+  const maxBytes = getMaxVideoBytes()
+  const largeWarning =
+    file && isVideo && file.size > maxBytes * 0.55
+
+  const toggleFullscreen = useCallback(() => {
+    const el = shellRef.current
+    if (!el) return
+    if (document.fullscreenElement) {
+      void document.exitFullscreen()
+    } else {
+      void el.requestFullscreen().catch(() => {})
+    }
+  }, [])
 
   return (
     <section
       data-studio-tool={tool}
-      className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900/40"
+      className="flex flex-col gap-5 rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900/40"
     >
       <div>
         <h2 className="font-serif text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -63,6 +106,12 @@ export function StudioVideoShell({
         </h2>
         <p className="mt-1 text-zinc-600 dark:text-zinc-400">{description}</p>
       </div>
+
+      <ol className="list-inside list-decimal space-y-1 rounded-lg border border-zinc-100 bg-zinc-50/90 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
+        <li>Sube o reutiliza un vídeo (compartido con Metadatos).</li>
+        <li>Reprodúcelo a pantalla completa si quieres revisar el detalle.</li>
+        <li>Ajusta los controles de abajo y procesa; compara en pestañas.</li>
+      </ol>
 
       {!file ? (
         <div className="flex flex-col gap-2">
@@ -80,8 +129,8 @@ export function StudioVideoShell({
             onChange={(e) => onPick(e.target.files)}
           />
           <p className="text-xs text-zinc-500">
-            También puedes cargar un vídeo desde la pestaña Metadatos; el archivo
-            se comparte entre todas las herramientas del estudio.
+            Un solo archivo por sesión de estudio; cambia de pestaña sin volver
+            a subirlo.
           </p>
         </div>
       ) : !isVideo ? (
@@ -92,8 +141,7 @@ export function StudioVideoShell({
             <span className="font-mono">
               {category ? CAT_LABEL[category] : '—'}
             </span>
-            . Carga un vídeo (MP4,
-            WebM, MOV…) o usa el selector de arriba.
+            . Carga un vídeo (MP4, WebM, MOV…) o usa el selector de arriba.
           </p>
           <Button
             type="button"
@@ -105,19 +153,128 @@ export function StudioVideoShell({
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-black dark:border-zinc-700">
-            <p className="border-b border-zinc-800 px-2 py-1 text-xs text-zinc-400">
-              {file.name}
-            </p>
-            <video
-              src={previewUrl ?? undefined}
-              controls
-              className="max-h-[min(320px,45vh)] w-full"
-            />
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-3 dark:border-zinc-800">
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-mono text-xs text-zinc-800 dark:text-zinc-200">
+                {file.name}
+              </p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                {formatBytes(file.size)}
+                {durationSec != null && (
+                  <>
+                    {' · '}
+                    <span className="tabular-nums">
+                      {formatDurationSeconds(durationSec)}
+                    </span>
+                  </>
+                )}
+                {' · '}
+                hasta ~{formatBytes(maxBytes)} procesables en el navegador
+              </p>
+            </div>
           </div>
-          {children}
-        </div>
+
+          {largeWarning ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+              Archivo grande: el proceso puede tardar y usar mucha RAM. Cierra
+              otras pestañas si ves lentitud o cierres inesperados.
+            </p>
+          ) : null}
+
+          {compareResultUrl ? (
+            <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
+              <button
+                type="button"
+                className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  previewTab === 'original'
+                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                    : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                }`}
+                onClick={() => setPreviewTab('original')}
+              >
+                Original
+              </button>
+              <button
+                type="button"
+                className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  previewTab === 'result'
+                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                    : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                }`}
+                onClick={() => setPreviewTab('result')}
+              >
+                Después de procesar
+              </button>
+              {onClearCompare ? (
+                <button
+                  type="button"
+                  className="ml-auto cursor-pointer rounded-md px-2 py-1.5 text-xs text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-200"
+                  onClick={() => {
+                    onClearCompare()
+                    setPreviewTab('original')
+                  }}
+                >
+                  Quitar resultado
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Vista previa
+            </p>
+          )}
+
+          <div
+            ref={shellRef}
+            className="relative overflow-hidden rounded-xl border border-zinc-800 bg-black shadow-inner"
+          >
+            {activeVideoSrc ? (
+              <video
+                key={activeVideoSrc}
+                className="mx-auto block w-full object-contain"
+                style={{ maxHeight: PREVIEW_MAX_H }}
+                src={activeVideoSrc}
+                controls
+                playsInline
+                preload="metadata"
+                onLoadedMetadata={(e) => {
+                  const d = e.currentTarget.duration
+                  setDurationSec(Number.isFinite(d) ? d : null)
+                }}
+              />
+            ) : null}
+            <div className="absolute right-2 top-2 flex gap-1">
+              <button
+                type="button"
+                onClick={() => toggleFullscreen()}
+                className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur hover:bg-black/80"
+              >
+                Pantalla completa
+              </button>
+            </div>
+          </div>
+
+          <details className="rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-400">
+            <summary className="cursor-pointer font-medium text-zinc-700 dark:text-zinc-300">
+              Sobre re-codificación y plataformas
+            </summary>
+            <p className="mt-2 leading-relaxed">
+              Exportar de nuevo con FFmpeg cambia códec, contenedor y huella
+              del archivo respecto al original; eso puede alterar comprobaciones
+              por hash o metadatos. Las redes usan señales propias (perceptual
+              hashing, audio, etc.); no garantizamos eludir ningún sistema de
+              detección de duplicados.
+            </p>
+          </details>
+
+          <div className="border-t border-zinc-200 pt-4 dark:border-zinc-700">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Controles
+            </h3>
+            {children}
+          </div>
+        </>
       )}
     </section>
   )

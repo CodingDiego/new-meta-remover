@@ -4,7 +4,8 @@ import { fetchFile } from '@ffmpeg/util'
 let instance: FFmpeg | null = null
 let loadPromise: Promise<FFmpeg> | null = null
 
-const MAX_VIDEO_BYTES = 180 * 1024 * 1024
+/** ~512 MB — balances TikTok-length clips vs browser RAM (WASM holds input+output). */
+const MAX_VIDEO_BYTES = 512 * 1024 * 1024
 
 export function getMaxVideoBytes(): number {
   return MAX_VIDEO_BYTES

@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
-import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -23,9 +24,12 @@ function formatErr(e: unknown): string {
 
 export type StructureToolProps = { tool: StudioTool }
 
-function StructureControls() {
+function StructureControls({
+  onProcessed,
+}: {
+  onProcessed: (blob: Blob) => void
+}) {
   const { file } = useStudioMedia()
-  const download = useStudioDownload()
   const [startSec, setStartSec] = useState(0)
   const [durationSec, setDurationSec] = useState(10)
   const [busy, setBusy] = useState(false)
@@ -62,19 +66,20 @@ function StructureControls() {
         )
       }
       const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      download(blob, '-cut', '.mp4')
-      setHint('Fragmento exportado.')
+      onProcessed(blob)
+      setHint('Fragmento listo. Revisa la pestaña «Después de procesar».')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
     }
-  }, [file, startSec, durationSec, download])
+  }, [file, startSec, durationSec, onProcessed])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
       <p className="text-zinc-600 dark:text-zinc-400">
-        Extrae un fragmento por tiempo (segundos desde el inicio).
+        Usa el reproductor de arriba para ubicar tiempos; luego define inicio y
+        duración del extracto.
       </p>
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
@@ -126,12 +131,23 @@ function StructureControls() {
 }
 
 export function StructureTool({ tool }: StructureToolProps) {
+  const download = useStudioDownload()
+  const { processedUrl, setProcessedBlob, clearProcessed } =
+    useVideoCompareResult()
+
   return (
     <StudioVideoShell
       tool={tool}
-      description="Recorte por tiempo (extracto). Re-codifica a MP4."
+      description="Recorte por tiempo con vista previa del archivo completo."
+      compareResultUrl={processedUrl}
+      onClearCompare={clearProcessed}
     >
-      <StructureControls />
+      <StructureControls
+        onProcessed={(blob) => {
+          setProcessedBlob(blob)
+          download(blob, '-cut', '.mp4')
+        }}
+      />
     </StudioVideoShell>
   )
 }

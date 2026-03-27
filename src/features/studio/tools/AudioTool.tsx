@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
-import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
+import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -13,6 +14,7 @@ import {
   getFfmpeg,
   OUT_MP4,
 } from '@/lib/video/ffmpegRun'
+import type { StudioTool } from '@/lib/search-params'
 
 const MUTE_VIDEO_ARGS = [
   '-an',
@@ -25,7 +27,6 @@ const MUTE_VIDEO_ARGS = [
   '-movflags',
   '+faststart',
 ] as const
-import type { StudioTool } from '@/lib/search-params'
 
 function formatErr(e: unknown): string {
   if (e instanceof Error) return e.message
@@ -35,9 +36,12 @@ function formatErr(e: unknown): string {
 
 export type AudioToolProps = { tool: StudioTool }
 
-function AudioControls() {
+function AudioControls({
+  onProcessed,
+}: {
+  onProcessed: (blob: Blob) => void
+}) {
   const { file } = useStudioMedia()
-  const download = useStudioDownload()
   const [mute, setMute] = useState(false)
   const [volume, setVolume] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -68,19 +72,20 @@ function AudioControls() {
       await ffmpegCleanupInput(ff, inName)
       if (code !== 0) throw new Error('ffmpeg no pudo ajustar el audio.')
       const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      download(blob, '-audio', '.mp4')
-      setHint('Listo.')
+      onProcessed(blob)
+      setHint('Listo. Comprueba el resultado en la otra pestaña.')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
     }
-  }, [file, mute, volume, download])
+  }, [file, mute, volume, onProcessed])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
       <p className="text-zinc-600 dark:text-zinc-400">
-        Silencia la pista o cambia el volumen (re-codifica el vídeo).
+        Escucha el original arriba; tras procesar, cambia a «Después de
+        procesar» para validar audio.
       </p>
       <label className="flex cursor-pointer items-center gap-2">
         <input
@@ -124,19 +129,30 @@ function AudioControls() {
         disabled={busy}
         onClick={() => void run()}
       >
-        {busy ? 'Procesando…' : 'Aplicar y descargar'}
+        {busy ? 'Procesando…' : 'Aplicar audio y descargar'}
       </Button>
     </div>
   )
 }
 
 export function AudioTool({ tool }: AudioToolProps) {
+  const download = useStudioDownload()
+  const { processedUrl, setProcessedBlob, clearProcessed } =
+    useVideoCompareResult()
+
   return (
     <StudioVideoShell
       tool={tool}
-      description="Control básico de volumen o silencio de la pista de audio."
+      description="Volumen o silencio. El vídeo de arriba muestra el archivo completo; compara tras exportar."
+      compareResultUrl={processedUrl}
+      onClearCompare={clearProcessed}
     >
-      <AudioControls />
+      <AudioControls
+        onProcessed={(blob) => {
+          setProcessedBlob(blob)
+          download(blob, '-audio', '.mp4')
+        }}
+      />
     </StudioVideoShell>
   )
 }
