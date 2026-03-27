@@ -30,6 +30,109 @@ const TOOL_LABELS: Record<string, string> = {
 
 const PREVIEW_MAX_H = 'min(78vh, 920px)'
 
+function VideoPlayerBlock({
+  src,
+  onDuration,
+}: {
+  src: string
+  onDuration: (sec: number | null) => void
+}) {
+  return (
+    <video
+      key={src}
+      className="mx-auto block w-full object-contain"
+      style={{ maxHeight: PREVIEW_MAX_H }}
+      src={src}
+      controls
+      playsInline
+      preload="metadata"
+      onLoadedMetadata={(e) => {
+        const d = e.currentTarget.duration
+        onDuration(Number.isFinite(d) ? d : null)
+      }}
+    />
+  )
+}
+
+/** key={resultUrl} resets tab so a new export defaults to «Después de procesar». */
+function OriginalVersusResultPreview({
+  originalUrl,
+  resultUrl,
+  onClearCompare,
+  shellRef,
+  onToggleFullscreen,
+}: {
+  originalUrl: string
+  resultUrl: string
+  onClearCompare?: () => void
+  shellRef: React.RefObject<HTMLDivElement | null>
+  onToggleFullscreen: () => void
+}) {
+  const [showOriginal, setShowOriginal] = useState(false)
+  const activeSrc = showOriginal ? originalUrl : resultUrl
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
+        <button
+          type="button"
+          className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            showOriginal
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+              : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+          }`}
+          onClick={() => setShowOriginal(true)}
+        >
+          Original
+        </button>
+        <button
+          type="button"
+          className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            !showOriginal
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+              : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+          }`}
+          onClick={() => setShowOriginal(false)}
+        >
+          Después de procesar
+        </button>
+        {onClearCompare ? (
+          <button
+            type="button"
+            className="ml-auto cursor-pointer rounded-md px-2 py-1.5 text-xs text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-200"
+            onClick={() => {
+              onClearCompare()
+            }}
+          >
+            Quitar resultado
+          </button>
+        ) : null}
+      </div>
+      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+        Vista previa
+      </p>
+      <div
+        ref={shellRef}
+        className="relative overflow-hidden rounded-xl border border-zinc-800 bg-black shadow-inner"
+      >
+        <VideoPlayerBlock
+          src={activeSrc}
+          onDuration={() => {}}
+        />
+        <div className="absolute right-2 top-2 flex gap-1">
+          <button
+            type="button"
+            onClick={() => onToggleFullscreen()}
+            className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur hover:bg-black/80"
+          >
+            Pantalla completa
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export type StudioVideoShellProps = {
   tool: StudioTool
   title?: string
@@ -54,18 +157,7 @@ export function StudioVideoShell({
   const category = file ? detectCategory(file) : null
   const isVideo = category === 'video'
 
-  const [previewTab, setPreviewTab] = useState<'original' | 'result'>(
-    'original',
-  )
   const [durationSec, setDurationSec] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (compareResultUrl) setPreviewTab('result')
-  }, [compareResultUrl])
-
-  useEffect(() => {
-    if (!compareResultUrl) setPreviewTab('original')
-  }, [compareResultUrl])
 
   const onPick = useCallback(
     (list: FileList | null) => {
@@ -75,11 +167,6 @@ export function StudioVideoShell({
     },
     [setFile, onClearCompare],
   )
-
-  const activeVideoSrc =
-    previewTab === 'result' && compareResultUrl
-      ? compareResultUrl
-      : previewUrl
 
   const maxBytes = getMaxVideoBytes()
   const largeWarning =
@@ -182,78 +269,42 @@ export function StudioVideoShell({
             </p>
           ) : null}
 
-          {compareResultUrl ? (
-            <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
-              <button
-                type="button"
-                className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  previewTab === 'original'
-                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                    : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
-                }`}
-                onClick={() => setPreviewTab('original')}
-              >
-                Original
-              </button>
-              <button
-                type="button"
-                className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  previewTab === 'result'
-                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                    : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
-                }`}
-                onClick={() => setPreviewTab('result')}
-              >
-                Después de procesar
-              </button>
-              {onClearCompare ? (
-                <button
-                  type="button"
-                  className="ml-auto cursor-pointer rounded-md px-2 py-1.5 text-xs text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-200"
-                  onClick={() => {
-                    onClearCompare()
-                    setPreviewTab('original')
-                  }}
-                >
-                  Quitar resultado
-                </button>
-              ) : null}
-            </div>
+          {compareResultUrl && previewUrl ? (
+            <OriginalVersusResultPreview
+              key={compareResultUrl}
+              originalUrl={previewUrl}
+              resultUrl={compareResultUrl}
+              onClearCompare={onClearCompare}
+              shellRef={shellRef}
+              onToggleFullscreen={toggleFullscreen}
+            />
           ) : (
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Vista previa
-            </p>
-          )}
-
-          <div
-            ref={shellRef}
-            className="relative overflow-hidden rounded-xl border border-zinc-800 bg-black shadow-inner"
-          >
-            {activeVideoSrc ? (
-              <video
-                key={activeVideoSrc}
-                className="mx-auto block w-full object-contain"
-                style={{ maxHeight: PREVIEW_MAX_H }}
-                src={activeVideoSrc}
-                controls
-                playsInline
-                preload="metadata"
-                onLoadedMetadata={(e) => {
-                  const d = e.currentTarget.duration
-                  setDurationSec(Number.isFinite(d) ? d : null)
-                }}
-              />
-            ) : null}
-            <div className="absolute right-2 top-2 flex gap-1">
-              <button
-                type="button"
-                onClick={() => toggleFullscreen()}
-                className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur hover:bg-black/80"
+            <>
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Vista previa (completa)
+              </p>
+              <div
+                ref={shellRef}
+                className="relative overflow-hidden rounded-xl border border-zinc-800 bg-black shadow-inner"
               >
-                Pantalla completa
-              </button>
-            </div>
-          </div>
+                {previewUrl ? (
+                  <VideoPlayerBlock
+                    src={previewUrl}
+                    onDuration={(d) => setDurationSec(d)}
+                  />
+                ) : null}
+                <div className="absolute right-2 top-2 flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleFullscreen()}
+                    className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur hover:bg-black/80"
+                  >
+                    Pantalla completa
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           <details className="rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-400">
             <summary className="cursor-pointer font-medium text-zinc-700 dark:text-zinc-300">
