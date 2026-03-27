@@ -1,5 +1,6 @@
 import { useQueryStates } from 'nuqs'
 import { Link, useParams } from 'react-router-dom'
+import { StudioMediaProvider } from '@/features/studio/StudioMediaProvider'
 import { StudioToolContent } from '@/features/studio/tools'
 import { studioParsers, type StudioTool } from '@/lib/search-params'
 
@@ -21,6 +22,7 @@ export function StudioPage() {
   const jobId = jobFromPath ?? jobFromQuery ?? undefined
 
   return (
+    <StudioMediaProvider>
     <main className="mx-auto flex min-h-[70vh] max-w-3xl flex-col gap-8 px-6 py-16">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -101,5 +103,6 @@ export function StudioPage() {
 
       <StudioToolContent tool={tool} />
     </main>
+    </StudioMediaProvider>
   )
 }

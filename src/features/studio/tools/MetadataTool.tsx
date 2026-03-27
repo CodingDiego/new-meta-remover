@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { useStudioMedia } from '@/features/studio/StudioMediaContext'
+import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import {
   readMetadataFromBlob,
   readMetadataForCategory,
   type MetadataReadResult,
 } from '@/lib/metadata/readMetadata'
+import { extension as fileExtension } from '@/lib/filename/buildDownloadFilename'
 import type { StudioTool } from '@/lib/search-params'
 import {
   detectCategory,
@@ -34,23 +37,6 @@ const TOOL_LABELS: Record<string, string> = {
   audio: 'Audio',
   overlays: 'Capas',
   encode: 'Codificar',
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
-
-function baseName(name: string): string {
-  const i = name.lastIndexOf('.')
-  return i > 0 ? name.slice(0, i) : name
 }
 
 function sortedEntries(flat: Record<string, string>): [string, string][] {
@@ -217,8 +203,22 @@ export type MetadataToolProps = { tool: StudioTool }
 
 export function MetadataTool({ tool }: MetadataToolProps) {
   const inputId = useId()
-  const [file, setFile] = useState<File | null>(null)
-  const [category, setCategory] = useState<FileCategory | null>(null)
+  const {
+    file,
+    setFile,
+    previewUrl: filePreviewUrl,
+    nameMode,
+    setNameMode,
+    nameSuffix32,
+    setNameSuffix32,
+  } = useStudioMedia()
+  const downloadWithPrefs = useStudioDownload()
+
+  const category = useMemo(
+    () => (file ? detectCategory(file) : null),
+    [file],
+  )
+
   const [resultBlob, setResultBlob] = useState<Blob | null>(null)
   const [videoNote, setVideoNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -236,21 +236,10 @@ export function MetadataTool({ tool }: MetadataToolProps) {
   const [afterLoading, setAfterLoading] = useState(false)
   const [afterError, setAfterError] = useState<string | null>(null)
 
-  const previewUrl = useMemo(() => {
-    if (!file) return null
-    return URL.createObjectURL(file)
-  }, [file])
-
   const resultPreviewUrl = useMemo(() => {
     if (!resultBlob) return null
     return URL.createObjectURL(resultBlob)
   }, [resultBlob])
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-    }
-  }, [previewUrl])
 
   useEffect(() => {
     return () => {
@@ -309,7 +298,6 @@ export function MetadataTool({ tool }: MetadataToolProps) {
 
   const clearAll = useCallback(() => {
     setFile(null)
-    setCategory(null)
     setResultBlob(null)
     setVideoNote(null)
     setError(null)
@@ -318,19 +306,21 @@ export function MetadataTool({ tool }: MetadataToolProps) {
     setAfterMeta(null)
     setAfterError(null)
     setPreviewTab('original')
-  }, [])
+  }, [setFile])
 
-  const onPickFile = useCallback((list: FileList | null) => {
-    const f = list?.[0] ?? null
-    setFile(f)
-    setResultBlob(null)
-    setVideoNote(null)
-    setError(null)
-    setAfterMeta(null)
-    setAfterError(null)
-    setPreviewTab('original')
-    setCategory(f ? detectCategory(f) : null)
-  }, [])
+  const onPickFile = useCallback(
+    (list: FileList | null) => {
+      const f = list?.[0] ?? null
+      setFile(f)
+      setResultBlob(null)
+      setVideoNote(null)
+      setError(null)
+      setAfterMeta(null)
+      setAfterError(null)
+      setPreviewTab('original')
+    },
+    [setFile],
+  )
 
   const strip = useCallback(async () => {
     if (!file || !category) return
@@ -388,15 +378,14 @@ export function MetadataTool({ tool }: MetadataToolProps) {
 
   const download = useCallback(() => {
     if (!file || !resultBlob) return
-    const ext = file.name.includes('.')
-      ? file.name.slice(file.name.lastIndexOf('.'))
-      : ''
-    const name = `${baseName(file.name)}-sin-metadatos${ext}`
-    downloadBlob(resultBlob, name)
-  }, [file, resultBlob])
+    const ext = fileExtension(file.name) || '.bin'
+    downloadWithPrefs(resultBlob, '-sin-metadatos', ext)
+  }, [file, resultBlob, downloadWithPrefs])
 
   const activePreviewUrl =
-    previewTab === 'result' && resultPreviewUrl ? resultPreviewUrl : previewUrl
+    previewTab === 'result' && resultPreviewUrl
+      ? resultPreviewUrl
+      : filePreviewUrl
 
   const showResultTab = Boolean(resultPreviewUrl)
 
@@ -517,6 +506,58 @@ export function MetadataTool({ tool }: MetadataToolProps) {
           </span>
         </span>
       </label>
+
+      <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-600">
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Nombre al descargar
+        </h3>
+        <p className="mb-3 text-xs text-zinc-600 dark:text-zinc-400">
+          Se usa en esta pestaña y en las herramientas de vídeo (Visual, Color,
+          Estructura, Audio, Capas, Codificar).
+        </p>
+        <div className="mb-3 flex flex-wrap gap-1 rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
+          <button
+            type="button"
+            className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              nameMode === 'preserve'
+                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+            }`}
+            onClick={() => setNameMode('preserve')}
+          >
+            Conservar nombre
+          </button>
+          <button
+            type="button"
+            className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              nameMode === 'randomize'
+                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+            }`}
+            onClick={() => setNameMode('randomize')}
+          >
+            Nombre aleatorio
+          </button>
+        </div>
+        <label className="flex cursor-pointer items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-0.5 cursor-pointer"
+            checked={nameSuffix32}
+            onChange={(e) => setNameSuffix32(e.target.checked)}
+          />
+          <span>
+            <span className="font-medium text-zinc-900 dark:text-zinc-100">
+              Añadir sufijo aleatorio de 32 caracteres
+            </span>
+            <span className="block text-xs text-zinc-600 dark:text-zinc-400">
+              Se inserta antes de la extensión (p. ej.{' '}
+              <code className="font-mono text-[11px]">vacación_abc…32.mp4</code>
+              ).
+            </span>
+          </span>
+        </label>
+      </div>
 
       {error ? (
         <div
