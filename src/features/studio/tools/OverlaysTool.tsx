@@ -6,6 +6,8 @@ import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { fetchFile } from '@ffmpeg/util'
+import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
+import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -48,6 +50,7 @@ function OverlayControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file } = useStudioMedia()
+  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
   const [text, setText] = useState('Marca de agua')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,36 +66,44 @@ function OverlayControls({
     setBusy(true)
     setError(null)
     setHint(null)
+    resetProgress()
     try {
       assertVideoSize(file)
       const png = await watermarkPng(t)
       const ff = await getFfmpeg()
-      const inName = await ffmpegWriteInput(ff, file)
-      await ff.writeFile('wm.png', await fetchFile(png))
-      const filter =
-        '[1:v]scale=iw*0.35:-1[wm];[0:v][wm]overlay=W-w-12:H-h-12'
-      const code = await ff.exec([
-        '-i',
-        inName,
-        '-i',
-        'wm.png',
-        '-filter_complex',
-        filter,
-        ...FFMPEG_MP4_TAIL,
-        OUT_MP4,
-      ])
-      await ffmpegCleanupInput(ff, inName)
-      await ff.deleteFile('wm.png').catch(() => {})
-      if (code !== 0) throw new Error('ffmpeg no pudo superponer la imagen.')
-      const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      onProcessed(blob)
-      setHint('Marca aplicada. Revisa la pestaña «Después de procesar».')
+      const unsub = bindProgress(ff)
+      try {
+        const inName = await ffmpegWriteInput(ff, file)
+        await ff.writeFile('wm.png', await fetchFile(png))
+        const filter =
+          '[1:v]scale=iw*0.35:-1[wm];[0:v][wm]overlay=W-w-12:H-h-12'
+        const code = await ff.exec([
+          '-i',
+          inName,
+          '-i',
+          'wm.png',
+          '-filter_complex',
+          filter,
+          ...FFMPEG_MP4_TAIL,
+          OUT_MP4,
+        ])
+        await ffmpegCleanupInput(ff, inName)
+        await ff.deleteFile('wm.png').catch(() => {})
+        if (code !== 0) throw new Error('ffmpeg no pudo superponer la imagen.')
+        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+        onProcessed(blob)
+        setHint('Marca aplicada. Revisa la pestaña «Después de procesar».')
+      } finally {
+        unsub()
+        resetProgress()
+      }
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
+      resetProgress()
     }
-  }, [file, text, onProcessed])
+  }, [file, text, onProcessed, bindProgress, resetProgress])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
@@ -122,6 +133,7 @@ function OverlayControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
+      <FfmpegProgress busy={busy} progressPct={progressPct} />
       <Button
         type="button"
         className="w-fit cursor-pointer"

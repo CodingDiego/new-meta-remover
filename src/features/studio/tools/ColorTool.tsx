@@ -5,6 +5,8 @@ import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
+import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
+import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -30,6 +32,7 @@ function ColorControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file } = useStudioMedia()
+  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
   const [brightness, setBrightness] = useState(0.08)
   const [contrast, setContrast] = useState(1.05)
   const [busy, setBusy] = useState(false)
@@ -41,30 +44,38 @@ function ColorControls({
     setBusy(true)
     setError(null)
     setHint(null)
+    resetProgress()
     try {
       assertVideoSize(file)
       const ff = await getFfmpeg()
-      const inName = await ffmpegWriteInput(ff, file)
-      const vf = `eq=brightness=${brightness}:contrast=${contrast}`
-      const code = await ff.exec([
-        '-i',
-        inName,
-        '-vf',
-        vf,
-        ...FFMPEG_MP4_TAIL,
-        OUT_MP4,
-      ])
-      await ffmpegCleanupInput(ff, inName)
-      if (code !== 0) throw new Error('ffmpeg no pudo aplicar el ajuste.')
-      const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      onProcessed(blob)
-      setHint('Listo. Revisa la pestaña «Después de procesar».')
+      const unsub = bindProgress(ff)
+      try {
+        const inName = await ffmpegWriteInput(ff, file)
+        const vf = `eq=brightness=${brightness}:contrast=${contrast}`
+        const code = await ff.exec([
+          '-i',
+          inName,
+          '-vf',
+          vf,
+          ...FFMPEG_MP4_TAIL,
+          OUT_MP4,
+        ])
+        await ffmpegCleanupInput(ff, inName)
+        if (code !== 0) throw new Error('ffmpeg no pudo aplicar el ajuste.')
+        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+        onProcessed(blob)
+        setHint('Listo. Revisa la pestaña «Después de procesar».')
+      } finally {
+        unsub()
+        resetProgress()
+      }
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
+      resetProgress()
     }
-  }, [file, brightness, contrast, onProcessed])
+  }, [file, brightness, contrast, onProcessed, bindProgress, resetProgress])
 
   return (
     <div className="flex flex-col gap-4">
@@ -107,6 +118,7 @@ function ColorControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
+      <FfmpegProgress busy={busy} progressPct={progressPct} />
       <Button
         type="button"
         className="w-fit cursor-pointer"

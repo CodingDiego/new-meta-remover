@@ -88,3 +88,22 @@ export function assertVideoSize(file: File): void {
     )
   }
 }
+
+/**
+ * ffmpeg.wasm emits progress as 0–1 while `exec` runs. Unsubscribe in `finally`
+ * after `exec` completes.
+ */
+export function subscribeFfmpegProgress(
+  ff: FFmpeg,
+  onProgress: (ratio01: number) => void,
+): () => void {
+  const handler = ({ progress }: { progress: number }) => {
+    const r =
+      typeof progress === 'number' && !Number.isNaN(progress) ? progress : 0
+    onProgress(Math.min(1, Math.max(0, r)))
+  }
+  ff.on('progress', handler)
+  return () => {
+    ff.off('progress', handler)
+  }
+}

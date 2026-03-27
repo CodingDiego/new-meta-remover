@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
   assertVideoSize,
@@ -29,27 +31,26 @@ function EncodeControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file } = useStudioMedia()
+  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
   const [crf, setCrf] = useState(23)
   const [preset, setPreset] = useState('fast')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
-  const [loadPct, setLoadPct] = useState<number | null>(null)
 
   const run = useCallback(async () => {
     if (!file) return
     setBusy(true)
     setError(null)
     setHint(null)
+    resetProgress()
     try {
       assertVideoSize(file)
       const ff = await getFfmpeg()
-      const onProg = ({ progress }: { progress: number }) => {
-        setLoadPct(Math.round(progress * 100))
-      }
-      ff.on('progress', onProg)
-      const inName = await ffmpegWriteInput(ff, file)
+      const unsub = bindProgress(ff)
+      let inName = ''
       try {
+        inName = await ffmpegWriteInput(ff, file)
         const code = await ff.exec([
           '-i',
           inName,
@@ -72,21 +73,17 @@ function EncodeControls({
         onProcessed(blob)
         setHint('Exportación lista. Compara calidad en la pestaña resultado.')
       } finally {
-        await ffmpegCleanupInput(ff, inName).catch(() => {})
-        ff.off('progress', onProg)
-        setLoadPct(null)
+        if (inName) await ffmpegCleanupInput(ff, inName).catch(() => {})
+        unsub()
+        resetProgress()
       }
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
-      setLoadPct(null)
+      resetProgress()
     }
-  }, [file, crf, preset, onProcessed])
-
-  useEffect(() => {
-    if (!busy) setLoadPct(null)
-  }, [busy])
+  }, [file, crf, preset, onProcessed, bindProgress, resetProgress])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
@@ -123,9 +120,7 @@ function EncodeControls({
           <option value="slow">slow</option>
         </select>
       </label>
-      {loadPct !== null && busy ? (
-        <p className="text-xs text-zinc-500">Progreso estimado: {loadPct}%</p>
-      ) : null}
+      <FfmpegProgress busy={busy} progressPct={progressPct} />
       {error ? (
         <p
           role="alert"

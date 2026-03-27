@@ -5,6 +5,8 @@ import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
+import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
+import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -42,6 +44,7 @@ function AudioControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file } = useStudioMedia()
+  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
   const [mute, setMute] = useState(false)
   const [volume, setVolume] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -53,33 +56,41 @@ function AudioControls({
     setBusy(true)
     setError(null)
     setHint(null)
+    resetProgress()
     try {
       assertVideoSize(file)
       const ff = await getFfmpeg()
-      const inName = await ffmpegWriteInput(ff, file)
-      const code = await ff.exec(
-        mute
-          ? ['-i', inName, ...MUTE_VIDEO_ARGS, OUT_MP4]
-          : [
-              '-i',
-              inName,
-              '-af',
-              `volume=${volume}`,
-              ...FFMPEG_MP4_TAIL,
-              OUT_MP4,
-            ],
-      )
-      await ffmpegCleanupInput(ff, inName)
-      if (code !== 0) throw new Error('ffmpeg no pudo ajustar el audio.')
-      const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      onProcessed(blob)
-      setHint('Listo. Comprueba el resultado en la otra pestaña.')
+      const unsub = bindProgress(ff)
+      try {
+        const inName = await ffmpegWriteInput(ff, file)
+        const code = await ff.exec(
+          mute
+            ? ['-i', inName, ...MUTE_VIDEO_ARGS, OUT_MP4]
+            : [
+                '-i',
+                inName,
+                '-af',
+                `volume=${volume}`,
+                ...FFMPEG_MP4_TAIL,
+                OUT_MP4,
+              ],
+        )
+        await ffmpegCleanupInput(ff, inName)
+        if (code !== 0) throw new Error('ffmpeg no pudo ajustar el audio.')
+        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+        onProcessed(blob)
+        setHint('Listo. Comprueba el resultado en la otra pestaña.')
+      } finally {
+        unsub()
+        resetProgress()
+      }
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
+      resetProgress()
     }
-  }, [file, mute, volume, onProcessed])
+  }, [file, mute, volume, onProcessed, bindProgress, resetProgress])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
@@ -123,6 +134,7 @@ function AudioControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
+      <FfmpegProgress busy={busy} progressPct={progressPct} />
       <Button
         type="button"
         className="w-fit cursor-pointer"

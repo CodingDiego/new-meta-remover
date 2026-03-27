@@ -5,6 +5,8 @@ import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
+import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
+import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -30,6 +32,7 @@ function StructureControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file } = useStudioMedia()
+  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
   const [startSec, setStartSec] = useState(0)
   const [durationSec, setDurationSec] = useState(10)
   const [busy, setBusy] = useState(false)
@@ -45,35 +48,43 @@ function StructureControls({
     setBusy(true)
     setError(null)
     setHint(null)
+    resetProgress()
     try {
       assertVideoSize(file)
       const ff = await getFfmpeg()
-      const inName = await ffmpegWriteInput(ff, file)
-      const code = await ff.exec([
-        '-ss',
-        String(startSec),
-        '-i',
-        inName,
-        '-t',
-        String(durationSec),
-        ...FFMPEG_MP4_TAIL,
-        OUT_MP4,
-      ])
-      await ffmpegCleanupInput(ff, inName)
-      if (code !== 0) {
-        throw new Error(
-          'No se pudo cortar el vídeo. Prueba otros tiempos o un formato distinto.',
-        )
+      const unsub = bindProgress(ff)
+      try {
+        const inName = await ffmpegWriteInput(ff, file)
+        const code = await ff.exec([
+          '-ss',
+          String(startSec),
+          '-i',
+          inName,
+          '-t',
+          String(durationSec),
+          ...FFMPEG_MP4_TAIL,
+          OUT_MP4,
+        ])
+        await ffmpegCleanupInput(ff, inName)
+        if (code !== 0) {
+          throw new Error(
+            'No se pudo cortar el vídeo. Prueba otros tiempos o un formato distinto.',
+          )
+        }
+        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+        onProcessed(blob)
+        setHint('Fragmento listo. Revisa la pestaña «Después de procesar».')
+      } finally {
+        unsub()
+        resetProgress()
       }
-      const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      onProcessed(blob)
-      setHint('Fragmento listo. Revisa la pestaña «Después de procesar».')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
+      resetProgress()
     }
-  }, [file, startSec, durationSec, onProcessed])
+  }, [file, startSec, durationSec, onProcessed, bindProgress, resetProgress])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
@@ -118,6 +129,7 @@ function StructureControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
+      <FfmpegProgress busy={busy} progressPct={progressPct} />
       <Button
         type="button"
         className="w-fit cursor-pointer"

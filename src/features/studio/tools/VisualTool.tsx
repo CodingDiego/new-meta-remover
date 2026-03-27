@@ -5,6 +5,8 @@ import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
+import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
+import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -30,6 +32,7 @@ function VisualControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file } = useStudioMedia()
+  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
@@ -39,31 +42,39 @@ function VisualControls({
     setBusy(true)
     setError(null)
     setHint(null)
+    resetProgress()
     try {
       assertVideoSize(file)
       const ff = await getFfmpeg()
-      const inName = await ffmpegWriteInput(ff, file)
-      const code = await ff.exec([
-        '-i',
-        inName,
-        '-vf',
-        'hflip',
-        ...FFMPEG_MP4_TAIL,
-        OUT_MP4,
-      ])
-      await ffmpegCleanupInput(ff, inName)
-      if (code !== 0) throw new Error('ffmpeg no pudo completar el volteo.')
-      const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-      onProcessed(blob)
-      setHint(
-        'Listo. Mira la pestaña «Después de procesar» y revisa la descarga.',
-      )
+      const unsub = bindProgress(ff)
+      try {
+        const inName = await ffmpegWriteInput(ff, file)
+        const code = await ff.exec([
+          '-i',
+          inName,
+          '-vf',
+          'hflip',
+          ...FFMPEG_MP4_TAIL,
+          OUT_MP4,
+        ])
+        await ffmpegCleanupInput(ff, inName)
+        if (code !== 0) throw new Error('ffmpeg no pudo completar el volteo.')
+        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+        onProcessed(blob)
+        setHint(
+          'Listo. Mira la pestaña «Después de procesar» y revisa la descarga.',
+        )
+      } finally {
+        unsub()
+        resetProgress()
+      }
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
+      resetProgress()
     }
-  }, [file, onProcessed])
+  }, [file, onProcessed, bindProgress, resetProgress])
 
   return (
     <div className="flex flex-col gap-3">
@@ -84,6 +95,7 @@ function VisualControls({
           {hint}
         </p>
       ) : null}
+      <FfmpegProgress busy={busy} progressPct={progressPct} />
       <Button
         type="button"
         className="w-fit cursor-pointer"
