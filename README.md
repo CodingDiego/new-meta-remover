@@ -140,12 +140,11 @@ Multi-file session; one **active** file for tools.
 
 | Field / method | Role |
 |----------------|------|
-| `items` | `{ id, file }[]` (`id` = `crypto.randomUUID()`) |
+| `items` | `{ id, file, nameMode, nameCustomStem, nameSuffix32 }[]` (`id` = `crypto.randomUUID()`) |
 | `activeId`, `file`, `previewUrl` | Active selection + object URL (revoked on change) |
 | `mediaHydrated` | `false` until IDB migration/recovery finishes |
 | `addFiles`, `removeItem`, `setActiveId`, `setFile`, `clearAll`, `getFileById` | Session CRUD |
-| `nameMode` | `preserve` \| `randomize` for download stem |
-| `nameSuffix32` | Optional `_` + 32 random chars before tag + extension |
+| `nameMode`, `nameCustomStem`, `nameSuffix32` | Download naming for the **active** item (each `StudioMediaItem` has its own copy) |
 
 **Hydration:** Migrates legacy `current-file` from IDB; if `processing-active` exists (crashed mid-job), restores and clears it.
 

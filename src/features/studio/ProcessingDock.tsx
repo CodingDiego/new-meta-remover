@@ -36,8 +36,7 @@ export function ProcessingDock() {
     dismissLastOutput,
     reorderQueuedJobs,
   } = useStudioProcessQueue()
-  const { getFileById, nameMode, nameCustomStem, nameSuffix32 } =
-    useStudioMedia()
+  const { items, getFileById } = useStudioMedia()
 
   const busy = runningJob != null
   const show =
@@ -48,6 +47,7 @@ export function ProcessingDock() {
   const downloadLastOutput = () => {
     if (!lastOutput) return
     const source = getFileById(lastOutput.fileId)
+    const item = items.find((i) => i.id === lastOutput.fileId)
     const ext =
       lastOutput.mime.includes('mp4')
         ? '.mp4'
@@ -56,15 +56,22 @@ export function ProcessingDock() {
           : source
             ? extFromName(source.name) || '.bin'
             : '.bin'
-    const filename = source
+    const filename = source && item
       ? buildDownloadFilename(source.name, {
-          mode: nameMode,
-          customStem: nameCustomStem,
-          suffix32: nameSuffix32,
+          mode: item.nameMode,
+          customStem: item.nameCustomStem,
+          suffix32: item.nameSuffix32,
           tag: tagForKind(lastOutput.kind),
           ext,
         })
-      : `export-${Date.now()}${ext}`
+      : source
+        ? buildDownloadFilename(source.name, {
+            mode: 'preserve',
+            suffix32: false,
+            tag: tagForKind(lastOutput.kind),
+            ext,
+          })
+        : `export-${Date.now()}${ext}`
     const url = URL.createObjectURL(lastOutput.blob)
     const a = document.createElement('a')
     a.href = url

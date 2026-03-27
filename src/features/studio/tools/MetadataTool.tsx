@@ -573,8 +573,10 @@ export function MetadataTool({ tool }: MetadataToolProps) {
             Nombre al descargar
           </h3>
           <p className="mt-2 max-w-prose text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-            Se usa en esta pestaña y en las herramientas de vídeo (Visual, Color,
-            Estructura, Audio, Capas, Codificar).
+            Se guarda <strong>por cada archivo</strong> de la sesión. Cambia al
+            seleccionar otro activo en la barra superior. Las descargas de esta
+            pestaña y de las herramientas de vídeo usan la configuración del
+            archivo que estés procesando.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">

@@ -2,9 +2,13 @@ import { createContext } from 'react'
 
 import type { DownloadNameMode } from '@/lib/filename/buildDownloadFilename'
 
+/** Session asset: file + download naming options (unique per item). */
 export type StudioMediaItem = {
   id: string
   file: File
+  nameMode: DownloadNameMode
+  nameCustomStem: string
+  nameSuffix32: boolean
 }
 
 export type StudioMediaContextValue = {
@@ -24,9 +28,10 @@ export type StudioMediaContextValue = {
   setFile: (f: File | null) => void
   clearAll: () => void
   getFileById: (id: string) => File | undefined
+  /** Download naming for the active asset (defaults when none selected). */
   nameMode: DownloadNameMode
   setNameMode: (m: DownloadNameMode) => void
-  /** Raw input when nameMode is `custom` (shown in Metadatos UI). */
+  /** Raw input when nameMode is `custom` (Metadatos UI); stored on the active item. */
   nameCustomStem: string
   setNameCustomStem: (s: string) => void
   nameSuffix32: boolean
