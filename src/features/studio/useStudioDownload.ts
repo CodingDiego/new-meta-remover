@@ -17,19 +17,20 @@ function triggerDownload(blob: Blob, filename: string) {
 
 /** Download blob using studio filename preferences (Metadatos + vídeo). */
 export function useStudioDownload() {
-  const { file, nameMode, nameSuffix32 } = useStudioMedia()
+  const { file, nameMode, nameCustomStem, nameSuffix32 } = useStudioMedia()
 
   return useCallback(
     (blob: Blob, tag: string, ext?: string) => {
       if (!file) return
       const name = buildDownloadFilename(file.name, {
         mode: nameMode,
+        customStem: nameCustomStem,
         suffix32: nameSuffix32,
         tag,
         ext,
       })
       triggerDownload(blob, name)
     },
-    [file, nameMode, nameSuffix32],
+    [file, nameMode, nameCustomStem, nameSuffix32],
   )
 }

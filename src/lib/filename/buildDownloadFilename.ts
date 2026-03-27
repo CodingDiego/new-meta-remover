@@ -33,10 +33,15 @@ export function sanitizeStem(name: string): string {
   return s.slice(0, 120) || 'export'
 }
 
-export type DownloadNameMode = 'preserve' | 'randomize'
+export type DownloadNameMode = 'preserve' | 'randomize' | 'custom'
 
 export type BuildDownloadFilenameOptions = {
   mode: DownloadNameMode
+  /**
+   * When `mode === 'custom'`, used as the file stem (sanitized). If empty or
+   * only whitespace, falls back to the original file base name.
+   */
+  customStem?: string
   /** When true, append `_` + 32 random chars before the tag and extension */
   suffix32: boolean
   /** e.g. "-sin-metadatos", "-visual" */
@@ -50,10 +55,13 @@ export function buildDownloadFilename(
   opts: BuildDownloadFilenameOptions,
 ): string {
   const ext = opts.ext ?? (extension(originalName) || '.bin')
+  const preserved = sanitizeStem(baseName(originalName))
   const stem =
     opts.mode === 'preserve'
-      ? sanitizeStem(baseName(originalName))
-      : randomStem(24)
+      ? preserved
+      : opts.mode === 'randomize'
+        ? randomStem(24)
+        : sanitizeStem((opts.customStem ?? '').trim()) || preserved
   const mid = opts.suffix32 ? `_${randomId32()}` : ''
   return `${stem}${mid}${opts.tag}${ext}`
 }

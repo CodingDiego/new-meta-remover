@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { usePerMediaState } from '@/features/studio/usePerMediaState'
 import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
@@ -35,8 +36,8 @@ function ColorControls({
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
   const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
-  const [brightness, setBrightness] = useState(0.08)
-  const [contrast, setContrast] = useState(1.05)
+  const [brightness, setBrightness] = usePerMediaState(activeId, 0.08)
+  const [contrast, setContrast] = usePerMediaState(activeId, 1.05)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)

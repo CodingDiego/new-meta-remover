@@ -214,6 +214,8 @@ export function MetadataTool({ tool }: MetadataToolProps) {
     previewUrl: filePreviewUrl,
     nameMode,
     setNameMode,
+    nameCustomStem,
+    setNameCustomStem,
     nameSuffix32,
     setNameSuffix32,
   } = useStudioMedia()
@@ -566,7 +568,37 @@ export function MetadataTool({ tool }: MetadataToolProps) {
           >
             Nombre aleatorio
           </button>
+          <button
+            type="button"
+            title="Usa el texto que escribas como base del nombre (se sanitiza; sin extensión)."
+            className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              nameMode === 'custom'
+                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+            }`}
+            onClick={() => setNameMode('custom')}
+          >
+            Nombre personalizado
+          </button>
         </div>
+        {nameMode === 'custom' ? (
+          <div className="mb-3 flex flex-col gap-1">
+            <FieldLabel
+              htmlFor="download-custom-stem"
+              label="Base del nombre (sin extensión)"
+              tip="Caracteres no seguros se sustituyen; si lo dejas vacío, se usa el nombre del archivo original como base."
+            />
+            <input
+              id="download-custom-stem"
+              type="text"
+              value={nameCustomStem}
+              onChange={(e) => setNameCustomStem(e.target.value)}
+              placeholder="p. ej. entrega-final-corte1"
+              className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+              autoComplete="off"
+            />
+          </div>
+        ) : null}
         <label className="flex cursor-pointer items-start gap-2">
           <input
             type="checkbox"

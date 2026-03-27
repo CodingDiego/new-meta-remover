@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { usePerMediaState } from '@/features/studio/usePerMediaState'
 import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { fetchFile } from '@ffmpeg/util'
@@ -53,7 +54,7 @@ function OverlayControls({
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
   const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
-  const [text, setText] = useState('Marca de agua')
+  const [text, setText] = usePerMediaState(activeId, 'Marca de agua')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)

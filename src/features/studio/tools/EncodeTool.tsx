@@ -6,6 +6,7 @@ import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { usePerMediaState } from '@/features/studio/usePerMediaState'
 import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
@@ -36,8 +37,14 @@ function EncodeControls({
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
   const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
-  const [crf, setCrf] = useState(Number(FFMPEG_X264_CRF_DEFAULT))
-  const [preset, setPreset] = useState<string>(FFMPEG_X264_PRESET_DEFAULT)
+  const [crf, setCrf] = usePerMediaState(
+    activeId,
+    Number(FFMPEG_X264_CRF_DEFAULT),
+  )
+  const [preset, setPreset] = usePerMediaState<string>(
+    activeId,
+    FFMPEG_X264_PRESET_DEFAULT,
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)

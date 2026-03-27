@@ -26,6 +26,9 @@ export type StudioMediaContextValue = {
   getFileById: (id: string) => File | undefined
   nameMode: DownloadNameMode
   setNameMode: (m: DownloadNameMode) => void
+  /** Raw input when nameMode is `custom` (shown in Metadatos UI). */
+  nameCustomStem: string
+  setNameCustomStem: (s: string) => void
   nameSuffix32: boolean
   setNameSuffix32: (v: boolean) => void
 }

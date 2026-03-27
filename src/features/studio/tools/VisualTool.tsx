@@ -6,6 +6,7 @@ import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { usePerMediaState } from '@/features/studio/usePerMediaState'
 import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { buildVisualTransformFilter } from '@/lib/video/visualFilters'
@@ -36,10 +37,10 @@ function VisualControls({
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
   const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
-  const [rotationDeg, setRotationDeg] = useState(0.5)
+  const [rotationDeg, setRotationDeg] = usePerMediaState(activeId, 0.5)
 
   const finePresets = [0.05, 0.1, 0.25, 0.5, 1, -0.1, -0.25] as const
-  const [flipH, setFlipH] = useState(false)
+  const [flipH, setFlipH] = usePerMediaState(activeId, false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)

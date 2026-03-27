@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { usePerMediaState } from '@/features/studio/usePerMediaState'
 import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
@@ -35,8 +36,8 @@ function StructureControls({
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
   const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
-  const [startSec, setStartSec] = useState(0)
-  const [durationSec, setDurationSec] = useState(10)
+  const [startSec, setStartSec] = usePerMediaState(activeId, 0)
+  const [durationSec, setDurationSec] = usePerMediaState(activeId, 10)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)

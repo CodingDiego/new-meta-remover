@@ -30,6 +30,7 @@ export function StudioMediaProvider({ children }: { children: ReactNode }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [mediaHydrated, setMediaHydrated] = useState(false)
   const [nameMode, setNameMode] = useState<DownloadNameMode>('preserve')
+  const [nameCustomStem, setNameCustomStem] = useState('')
   const [nameSuffix32, setNameSuffix32] = useState(false)
 
   const activeIdRef = useRef<string | null>(null)
@@ -144,6 +145,8 @@ export function StudioMediaProvider({ children }: { children: ReactNode }) {
       getFileById,
       nameMode,
       setNameMode,
+      nameCustomStem,
+      setNameCustomStem,
       nameSuffix32,
       setNameSuffix32,
     }),
@@ -160,6 +163,7 @@ export function StudioMediaProvider({ children }: { children: ReactNode }) {
       clearAll,
       getFileById,
       nameMode,
+      nameCustomStem,
       nameSuffix32,
     ],
   )

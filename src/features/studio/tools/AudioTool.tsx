@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { usePerMediaState } from '@/features/studio/usePerMediaState'
 import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
@@ -37,8 +38,8 @@ function AudioControls({
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
   const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
-  const [mute, setMute] = useState(false)
-  const [volume, setVolume] = useState(1)
+  const [mute, setMute] = usePerMediaState(activeId, false)
+  const [volume, setVolume] = usePerMediaState(activeId, 1)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
