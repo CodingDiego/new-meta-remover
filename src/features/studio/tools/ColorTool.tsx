@@ -63,7 +63,7 @@ function ColorControls({
           })
           try {
             const inName = await ffmpegWriteInput(ff, f)
-            const vf = `eq=brightness=${b}:contrast=${c}`
+            const vf = `eq=brightness=${b}:contrast=${c},format=yuv420p`
             const code = await ff.exec([
               '-i',
               inName,

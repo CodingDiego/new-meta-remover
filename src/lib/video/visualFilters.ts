@@ -23,5 +23,6 @@ export function buildVisualTransformFilter(
       'Elige un ángulo distinto de 0° o activa el espejo horizontal.',
     )
   }
-  return parts.join(',')
+  /** Chroma subsampling expected by H.264 + `<video>` (same as -pix_fmt yuv420p). */
+  return `${parts.join(',')},format=yuv420p`
 }

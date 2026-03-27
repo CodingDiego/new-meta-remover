@@ -66,7 +66,9 @@ export async function ffmpegCleanupInput(
 /**
  * H.264 + AAC + faststart — tuned for **ffmpeg.wasm** (much slower than native FFmpeg).
  * Defaults favor **encode speed** over marginal quality: `veryfast` + CRF 26.
- * For higher quality, use the Encode tool (preset/CRF) or raise these constants.
+ *
+ * **Web playback:** `yuv420p` + H.264 Main + AAC 48 kHz avoids “codec not
+ * supported” in browsers and common desktop players. Do not omit `-pix_fmt`.
  */
 export const FFMPEG_X264_PRESET_DEFAULT = 'veryfast' as const
 export const FFMPEG_X264_CRF_DEFAULT = '26'
@@ -78,6 +80,12 @@ export const FFMPEG_MP4_TAIL = [
   FFMPEG_X264_PRESET_DEFAULT,
   '-crf',
   FFMPEG_X264_CRF_DEFAULT,
+  /** Required for HTML5 video / hardware decoders (avoid yuv444 / 10-bit surprises). */
+  '-pix_fmt',
+  'yuv420p',
+  /** Main Profile + yuv420p is what browsers expect; level is auto from resolution. */
+  '-profile:v',
+  'main',
   /** wasm often benefits from explicit thread hint (no-op on some builds). */
   '-threads',
   '0',
@@ -85,6 +93,9 @@ export const FFMPEG_MP4_TAIL = [
   'aac',
   '-b:a',
   '128k',
+  /** Standard for video containers; improves player compatibility. */
+  '-ar',
+  '48000',
   '-movflags',
   '+faststart',
 ] as const
