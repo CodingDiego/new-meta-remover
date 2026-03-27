@@ -1,7 +1,17 @@
 import { useQueryStates } from 'nuqs'
 import { Link, useParams } from 'react-router-dom'
 import { StudioToolContent } from '@/features/studio/tools'
-import { studioParsers } from '@/lib/search-params'
+import { studioParsers, type StudioTool } from '@/lib/search-params'
+
+const STUDIO_TOOL_LABEL: Record<StudioTool, string> = {
+  metadata: 'Metadatos',
+  visual: 'Visual',
+  color: 'Color',
+  structure: 'Estructura',
+  audio: 'Audio',
+  overlays: 'Capas',
+  encode: 'Codificar',
+}
 
 export function StudioPage() {
   const { jobId: jobFromPath } = useParams<{ jobId?: string }>()
@@ -24,7 +34,7 @@ export function StudioPage() {
         </div>
         <Link
           to="/"
-          className="text-sm text-zinc-600 underline dark:text-zinc-400"
+          className="cursor-pointer text-sm text-zinc-600 underline underline-offset-2 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
         >
           ← Home
         </Link>
@@ -76,14 +86,15 @@ export function StudioPage() {
           <button
             key={t}
             type="button"
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+            aria-current={tool === t ? 'page' : undefined}
+            className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               tool === t
                 ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'border border-zinc-300 dark:border-zinc-600'
+                : 'border border-zinc-300 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800'
             }`}
             onClick={() => void setStudio({ tool: t })}
           >
-            {t}
+            {STUDIO_TOOL_LABEL[t]}
           </button>
         ))}
       </div>

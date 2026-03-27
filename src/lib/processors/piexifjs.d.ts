@@ -5,6 +5,9 @@ declare module 'piexifjs' {
     dump(exifDict: unknown): string
     load(data: string): unknown
     version: string
+    ImageIFD: Record<string, number>
+    ExifIFD: Record<string, number>
+    GPSIFD: Record<string, number>
   }
   const piexif: Piexif
   export default piexif

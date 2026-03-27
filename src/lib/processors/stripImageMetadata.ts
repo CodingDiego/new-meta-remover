@@ -1,5 +1,6 @@
 import exifr from 'exifr'
 import piexif from 'piexifjs'
+import { getRandomImageExif } from '@/lib/metadata/randomMetadata'
 
 function arrayBufferToBinaryString(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer)
@@ -48,6 +49,53 @@ function isWebp(buffer: ArrayBuffer): boolean {
   )
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+function dataUrlToBlob(dataUrl: string, type: string): Blob {
+  const [header, base64] = dataUrl.split(',')
+  if (!base64) throw new Error('Data URL inválida')
+  const mime = header?.match(/:(.*?);/)?.[1] ?? type
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type: mime })
+}
+
+async function addRandomExifToJpeg(blob: Blob): Promise<Blob> {
+  const dataUrl = await blobToDataUrl(blob)
+  const meta = getRandomImageExif()
+  const shouldIncludeMakeModel = Math.random() < 0.75
+  const shouldIncludeSoftware = Math.random() < 0.8
+  const zeroth: Record<number, string | [number, number]> = {
+    ...(shouldIncludeMakeModel
+      ? {
+          [piexif.ImageIFD.Make]: meta.make,
+          [piexif.ImageIFD.Model]: meta.model,
+        }
+      : {}),
+    ...(shouldIncludeSoftware
+      ? { [piexif.ImageIFD.Software]: meta.software }
+      : {}),
+    [piexif.ImageIFD.XResolution]: [meta.dpi, 1],
+    [piexif.ImageIFD.YResolution]: [meta.dpi, 1],
+  }
+  const exifBlock: Record<number, string> = {
+    [piexif.ExifIFD.DateTimeOriginal]: meta.dateTimeOriginal,
+    [piexif.ExifIFD.DateTimeDigitized]: meta.dateTimeDigitized,
+  }
+  const exifObj = { '0th': zeroth, Exif: exifBlock, GPS: {} }
+  const exifBytes = piexif.dump(exifObj)
+  const inserted = piexif.insert(exifBytes, dataUrl)
+  return dataUrlToBlob(inserted, 'image/jpeg')
+}
+
 async function stripViaCanvas(
   file: File,
   mime: string
@@ -82,13 +130,31 @@ async function jpegStillHasExif(blob: Blob): Promise<boolean> {
   }
 }
 
+export type StripImageOptions = {
+  /** After strip, inject plausible random EXIF (JPEG only). */
+  addRandomized?: boolean
+}
+
 /**
  * Strips embedded metadata from common raster images.
  * JPEG: removes EXIF via piexifjs; uses exifr to verify / canvas fallback if needed.
  * PNG / WebP: re-encodes via canvas (strips chunks / EXIF / XMP in practice).
  */
-export async function stripImageMetadata(file: File): Promise<Blob> {
+export async function stripImageMetadata(
+  file: File,
+  options?: StripImageOptions,
+): Promise<Blob> {
+  const addRandomized = options?.addRandomized ?? false
   const mime = file.type || 'application/octet-stream'
+
+  async function finalizeJpeg(b: Blob): Promise<Blob> {
+    if (!addRandomized) return b
+    try {
+      return await addRandomExifToJpeg(b)
+    } catch {
+      return b
+    }
+  }
   let buffer: ArrayBuffer
   try {
     buffer = await file.arrayBuffer()
@@ -115,14 +181,14 @@ export async function stripImageMetadata(file: File): Promise<Blob> {
         type: 'image/jpeg',
       })
       if (await jpegStillHasExif(blob)) {
-        return await stripViaCanvas(file, 'image/jpeg')
+        return finalizeJpeg(await stripViaCanvas(file, 'image/jpeg'))
       }
-      return blob
+      return finalizeJpeg(blob)
     } catch {
       try {
-        return await stripViaCanvas(file, 'image/jpeg')
+        return finalizeJpeg(await stripViaCanvas(file, 'image/jpeg'))
       } catch {
-        return new Blob([buffer], { type: 'image/jpeg' })
+        return finalizeJpeg(new Blob([buffer], { type: 'image/jpeg' }))
       }
     }
   }
@@ -145,9 +211,9 @@ export async function stripImageMetadata(file: File): Promise<Blob> {
 
   if (mime === 'image/jpeg' || mime === 'image/jpg') {
     try {
-      return await stripViaCanvas(file, 'image/jpeg')
+      return finalizeJpeg(await stripViaCanvas(file, 'image/jpeg'))
     } catch {
-      return new Blob([buffer], { type: mime })
+      return finalizeJpeg(new Blob([buffer], { type: mime }))
     }
   }
   if (mime === 'image/png') {

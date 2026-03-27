@@ -1,4 +1,4 @@
-export type FileCategory = 'image' | 'pdf' | 'video' | 'unknown'
+export type FileCategory = 'image' | 'pdf' | 'video' | 'audio' | 'unknown'
 
 const IMAGE_EXT = new Set([
   'jpg',
@@ -27,6 +27,18 @@ const VIDEO_EXT = new Set([
   'mpg',
 ])
 
+const AUDIO_EXT = new Set([
+  'mp3',
+  'wav',
+  'ogg',
+  'oga',
+  'flac',
+  'aac',
+  'm4a',
+  'opus',
+  'wma',
+])
+
 function extFromName(name: string): string {
   const i = name.lastIndexOf('.')
   if (i < 0 || i === name.length - 1) return ''
@@ -43,10 +55,12 @@ export function detectCategory(file: File): FileCategory {
   if (mime.startsWith('image/')) return 'image'
   if (mime === 'application/pdf') return 'pdf'
   if (mime.startsWith('video/')) return 'video'
+  if (mime.startsWith('audio/')) return 'audio'
 
   if (ext === 'pdf') return 'pdf'
   if (IMAGE_EXT.has(ext)) return 'image'
   if (VIDEO_EXT.has(ext)) return 'video'
+  if (AUDIO_EXT.has(ext)) return 'audio'
 
   return 'unknown'
 }
