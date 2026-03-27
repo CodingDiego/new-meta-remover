@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react'
 
+import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
-import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
+import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import {
   assertVideoSize,
@@ -16,6 +17,7 @@ import {
   ffmpegWriteInput,
   getFfmpeg,
   OUT_MP4,
+  subscribeFfmpegProgress,
 } from '@/lib/video/ffmpegRun'
 import type { StudioTool } from '@/lib/search-params'
 
@@ -32,8 +34,8 @@ function EncodeControls({
 }: {
   onProcessed: (blob: Blob) => void
 }) {
-  const { file } = useStudioMedia()
-  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
+  const { file, activeId, getFileById } = useStudioMedia()
+  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
   const [crf, setCrf] = useState(Number(FFMPEG_X264_CRF_DEFAULT))
   const [preset, setPreset] = useState<string>(FFMPEG_X264_PRESET_DEFAULT)
   const [busy, setBusy] = useState(false)
@@ -41,66 +43,78 @@ function EncodeControls({
   const [hint, setHint] = useState<string | null>(null)
 
   const run = useCallback(async () => {
-    if (!file) return
+    if (!file || !activeId) return
+    const fileId = activeId
+    const p = preset
+    const c = crf
     setBusy(true)
     setError(null)
     setHint(null)
-    resetProgress()
     try {
-      assertVideoSize(file)
-      const ff = await getFfmpeg()
-      const unsub = bindProgress(ff)
-      let inName = ''
-      try {
-        inName = await ffmpegWriteInput(ff, file)
-        const code = await ff.exec([
-          '-i',
-          inName,
-          '-c:v',
-          'libx264',
-          '-preset',
-          preset,
-          '-crf',
-          String(crf),
-          '-threads',
-          '0',
-          '-c:a',
-          'aac',
-          '-b:a',
-          '128k',
-          '-movflags',
-          '+faststart',
-          OUT_MP4,
-        ])
-        if (code !== 0) throw new Error('ffmpeg no pudo re-codificar.')
-        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-        onProcessed(blob)
-        setHint('Exportación lista. Compara calidad en la pestaña resultado.')
-      } finally {
-        if (inName) await ffmpegCleanupInput(ff, inName).catch(() => {})
-        unsub()
-        resetProgress()
-      }
+      const blob = await enqueue({
+        label: 'Codificar — H.264 / AAC',
+        fileId,
+        run: async ({ onProgress }) => {
+          const f = getFileById(fileId)
+          if (!f) throw new Error('Archivo no encontrado.')
+          assertVideoSize(f)
+          const ff = await getFfmpeg()
+          const unsub = subscribeFfmpegProgress(ff, (ratio01) => {
+            onProgress(Math.round(ratio01 * 100))
+          })
+          let inName = ''
+          try {
+            inName = await ffmpegWriteInput(ff, f)
+            const code = await ff.exec([
+              '-i',
+              inName,
+              '-c:v',
+              'libx264',
+              '-preset',
+              p,
+              '-crf',
+              String(c),
+              '-threads',
+              '0',
+              '-c:a',
+              'aac',
+              '-b:a',
+              '128k',
+              '-movflags',
+              '+faststart',
+              OUT_MP4,
+            ])
+            if (code !== 0) throw new Error('ffmpeg no pudo re-codificar.')
+            return ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+          } finally {
+            if (inName) await ffmpegCleanupInput(ff, inName).catch(() => {})
+            unsub()
+          }
+        },
+      })
+      onProcessed(blob)
+      setHint('Exportación lista. Compara calidad en la pestaña resultado.')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
-      resetProgress()
     }
-  }, [file, crf, preset, onProcessed, bindProgress, resetProgress])
+  }, [file, activeId, crf, preset, enqueue, getFileById, onProcessed])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
       <p className="text-zinc-600 dark:text-zinc-400">
-        Re-codifica a MP4 (H.264 + AAC). Por defecto usa preset rápido y CRF más
-        alto que un export “cine” para acortar tiempo en el navegador. CRF más
-        bajo = mejor calidad, más lento.
+        Re-codifica a MP4 (H.264 + AAC). El proceso puede seguir en segundo
+        plano; la barra inferior muestra el avance.
       </p>
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          CRF ({crf})
-        </span>
+      <div className="flex flex-col gap-1">
+        <FieldLabel
+          htmlFor="encode-crf"
+          label={`CRF (${crf})`}
+          tip="Constant Rate Factor (libx264): valores más bajos = mejor calidad y tamaño mayor; más altos = más rápido y más compresión. Rango típico 18–28."
+        />
         <input
+          id="encode-crf"
           type="range"
           min={18}
           max={32}
@@ -109,12 +123,15 @@ function EncodeControls({
           onChange={(e) => setCrf(Number(e.target.value))}
           className="cursor-pointer"
         />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Presets
-        </span>
+      </div>
+      <div className="flex flex-col gap-1">
+        <FieldLabel
+          htmlFor="encode-preset"
+          label="Preset x264"
+          tip="Velocidad de codificación: ultrafast/veryfast terminan antes en wasm; slow/veryslow comprimen más pero tardan mucho más."
+        />
         <select
+          id="encode-preset"
           value={preset}
           onChange={(e) => setPreset(e.target.value)}
           className="cursor-pointer rounded-md border border-zinc-300 bg-white px-2 py-1.5 dark:border-zinc-600 dark:bg-zinc-900"
@@ -127,8 +144,11 @@ function EncodeControls({
           <option value="medium">medium</option>
           <option value="slow">slow</option>
         </select>
-      </label>
-      <FfmpegProgress busy={busy} progressPct={progressPct} />
+      </div>
+      <FfmpegProgress
+        busy={busy}
+        progressPct={busy ? queueProgress : null}
+      />
       {error ? (
         <p
           role="alert"
@@ -144,9 +164,10 @@ function EncodeControls({
         type="button"
         className="w-fit cursor-pointer"
         disabled={busy}
+        title="Encola un trabajo de re-codificación. Varios trabajos se ejecutan en orden."
         onClick={() => void run()}
       >
-        {busy ? 'Codificando…' : 'Re-codificar y descargar'}
+        {busy ? 'En cola / codificando…' : 'Re-codificar y descargar'}
       </Button>
     </div>
   )

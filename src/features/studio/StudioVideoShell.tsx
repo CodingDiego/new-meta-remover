@@ -153,7 +153,7 @@ export function StudioVideoShell({
 }: StudioVideoShellProps) {
   const inputId = useId()
   const shellRef = useRef<HTMLDivElement>(null)
-  const { file, setFile, previewUrl } = useStudioMedia()
+  const { file, addFiles, removeItem, activeId, previewUrl } = useStudioMedia()
   const category = file ? detectCategory(file) : null
   const isVideo = category === 'video'
 
@@ -161,11 +161,11 @@ export function StudioVideoShell({
 
   const onPick = useCallback(
     (list: FileList | null) => {
-      const f = list?.[0] ?? null
-      setFile(f)
+      if (!list?.length) return
+      addFiles(Array.from(list))
       onClearCompare?.()
     },
-    [setFile, onClearCompare],
+    [addFiles, onClearCompare],
   )
 
   const maxBytes = getMaxVideoBytes()
@@ -195,7 +195,10 @@ export function StudioVideoShell({
       </div>
 
       <ol className="list-inside list-decimal space-y-1 rounded-lg border border-zinc-100 bg-zinc-50/90 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
-        <li>Sube o reutiliza un vídeo (compartido con Metadatos).</li>
+        <li>
+          Sube uno o varios vídeos (se añaden a la sesión; cambia el activo en
+          la barra superior).
+        </li>
         <li>Reprodúcelo a pantalla completa si quieres revisar el detalle.</li>
         <li>Ajusta los controles de abajo y procesa; compara en pestañas.</li>
       </ol>
@@ -205,19 +208,21 @@ export function StudioVideoShell({
           <label
             htmlFor={inputId}
             className="text-xs font-medium uppercase tracking-wide text-zinc-500"
+            title="Puedes elegir varios archivos a la vez; se encolan en memoria en esta pestaña."
           >
-            Vídeo
+            Vídeo(s)
           </label>
           <input
             id={inputId}
             type="file"
             accept="video/*"
+            multiple
             className="block w-full cursor-pointer text-zinc-900 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-zinc-300 file:bg-zinc-50 file:px-3 file:py-1.5 file:text-xs file:font-medium dark:text-zinc-100 dark:file:border-zinc-600 dark:file:bg-zinc-800"
             onChange={(e) => onPick(e.target.files)}
           />
           <p className="text-xs text-zinc-500">
-            El archivo se guarda en este navegador (IndexedDB) y se mantiene al
-            ir al inicio o cambiar de herramienta.
+            Los archivos viven en memoria en esta sesión. Solo el encode en
+            curso usa IndexedDB temporalmente; al terminar se libera.
           </p>
         </div>
       ) : !isVideo ? (
@@ -234,9 +239,10 @@ export function StudioVideoShell({
             type="button"
             variant="outline"
             className="mt-3 cursor-pointer"
-            onClick={() => setFile(null)}
+            title="Quita solo el archivo activo de la lista"
+            onClick={() => activeId && removeItem(activeId)}
           >
-            Quitar archivo
+            Quitar archivo activo
           </Button>
         </div>
       ) : (

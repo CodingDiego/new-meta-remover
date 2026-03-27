@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -11,23 +10,35 @@ import {
 import type { DownloadNameMode } from '@/lib/filename/buildDownloadFilename'
 import {
   fileFromPersisted,
-  idbGetStudioFile,
-  idbPutStudioFile,
-  idbRemoveStudioFile,
+  idbConsumeLegacyPersistedFile,
+  idbGetProcessingFile,
+  idbRemoveProcessingFile,
 } from '@/lib/studio/studioMediaIdb'
 
 import {
   StudioMediaContext,
+  type StudioMediaItem,
   type StudioMediaContextValue,
 } from '@/features/studio/studioMediaContext'
 
+function newId(): string {
+  return crypto.randomUUID()
+}
+
 export function StudioMediaProvider({ children }: { children: ReactNode }) {
-  const [file, setFileState] = useState<File | null>(null)
+  const [items, setItems] = useState<StudioMediaItem[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [mediaHydrated, setMediaHydrated] = useState(false)
-  /** True only after the initial IndexedDB read finishes (StrictMode-safe). */
-  const readyToPersist = useRef(false)
   const [nameMode, setNameMode] = useState<DownloadNameMode>('preserve')
   const [nameSuffix32, setNameSuffix32] = useState(false)
+
+  const activeIdRef = useRef<string | null>(null)
+  activeIdRef.current = activeId
+
+  const file = useMemo(
+    () => items.find((i) => i.id === activeId)?.file ?? null,
+    [items, activeId],
+  )
 
   const previewUrl = useMemo(() => {
     if (!file) return null
@@ -42,20 +53,28 @@ export function StudioMediaProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
-    readyToPersist.current = false
     void (async () => {
       try {
-        const rec = await idbGetStudioFile()
-        if (!cancelled && rec) {
-          setFileState(fileFromPersisted(rec))
+        const legacy = await idbConsumeLegacyPersistedFile()
+        const interrupted = await idbGetProcessingFile()
+        const toAdd: File[] = []
+        if (legacy) toAdd.push(fileFromPersisted(legacy))
+        if (interrupted) {
+          toAdd.push(fileFromPersisted(interrupted))
+          await idbRemoveProcessingFile()
+        }
+        if (!cancelled && toAdd.length > 0) {
+          const next: StudioMediaItem[] = toAdd.map((f) => ({
+            id: newId(),
+            file: f,
+          }))
+          setItems(next)
+          setActiveId(next[next.length - 1]!.id)
         }
       } catch (e) {
-        console.warn('[studio] No se pudo restaurar el archivo guardado', e)
+        console.warn('[studio] Migración / recuperación IDB', e)
       } finally {
-        if (!cancelled) {
-          readyToPersist.current = true
-          setMediaHydrated(true)
-        }
+        if (!cancelled) setMediaHydrated(true)
       }
     })()
     return () => {
@@ -63,43 +82,83 @@ export function StudioMediaProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const persistFile = useEffectEvent(async () => {
-    try {
-      if (!file) {
-        await idbRemoveStudioFile()
-        return
-      }
-      await idbPutStudioFile(file)
-    } catch (e) {
-      console.warn('[studio] No se pudo guardar el archivo en IndexedDB', e)
-    }
-  })
+  const getFileById = useCallback(
+    (id: string) => items.find((i) => i.id === id)?.file,
+    [items],
+  )
 
-  useEffect(() => {
-    if (!mediaHydrated || !readyToPersist.current) return
-    void persistFile()
-  }, [file, mediaHydrated])
+  const addFiles = useCallback((files: File[]) => {
+    if (files.length === 0) return
+    const next: StudioMediaItem[] = files.map((f) => ({
+      id: newId(),
+      file: f,
+    }))
+    setItems((prev) => [...prev, ...next])
+    setActiveId(next[next.length - 1]!.id)
+  }, [])
+
+  const removeItem = useCallback((id: string) => {
+    setItems((prev) => {
+      const next = prev.filter((i) => i.id !== id)
+      setActiveId((cur) => {
+        if (cur !== id) return cur
+        return next[0]?.id ?? null
+      })
+      return next
+    })
+  }, [])
 
   const setFile = useCallback((f: File | null) => {
-    setFileState(f)
+    if (!f) {
+      const cur = activeIdRef.current
+      if (!cur) return
+      setItems((prev) => {
+        const next = prev.filter((i) => i.id !== cur)
+        setActiveId(next[0]?.id ?? null)
+        return next
+      })
+      return
+    }
+    const id = newId()
+    setItems([{ id, file: f }])
+    setActiveId(id)
+  }, [])
+
+  const clearAll = useCallback(() => {
+    setItems([])
+    setActiveId(null)
   }, [])
 
   const value = useMemo(
     (): StudioMediaContextValue => ({
+      items,
+      activeId,
       file,
-      setFile,
       previewUrl,
       mediaHydrated,
+      addFiles,
+      removeItem,
+      setActiveId,
+      setFile,
+      clearAll,
+      getFileById,
       nameMode,
       setNameMode,
       nameSuffix32,
       setNameSuffix32,
     }),
     [
+      items,
+      activeId,
       file,
-      setFile,
       previewUrl,
       mediaHydrated,
+      addFiles,
+      removeItem,
+      setActiveId,
+      setFile,
+      clearAll,
+      getFileById,
       nameMode,
       nameSuffix32,
     ],

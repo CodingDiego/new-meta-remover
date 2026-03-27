@@ -4,7 +4,7 @@ import { formatBytes } from '@/lib/formatBytes'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 
 export function HomePage() {
-  const { file, mediaHydrated } = useStudioMedia()
+  const { file, items, mediaHydrated } = useStudioMedia()
 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-2xl flex-col gap-8 px-6 py-16">
@@ -18,16 +18,19 @@ export function HomePage() {
         </p>
       </div>
 
-      {mediaHydrated && file ? (
+      {mediaHydrated && items.length > 0 && file ? (
         <section className="rounded-xl border border-emerald-500/30 bg-emerald-50/90 p-5 dark:border-emerald-500/25 dark:bg-emerald-950/30">
           <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
-            Tienes un archivo en el editor
+            {items.length === 1
+              ? 'Tienes un archivo en el editor'
+              : `Tienes ${items.length} archivos en la sesión`}
           </p>
           <p className="mt-1 truncate font-mono text-sm text-emerald-800 dark:text-emerald-200/90">
             {file.name}
+            {items.length > 1 ? ' (activo)' : ''}
           </p>
           <p className="mt-0.5 text-xs text-emerald-700/80 dark:text-emerald-300/70">
-            {formatBytes(file.size)} · se conserva al volver a Studio
+            {formatBytes(file.size)} · en memoria hasta cerrar la pestaña
           </p>
           <Link
             className="mt-4 inline-flex rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500"

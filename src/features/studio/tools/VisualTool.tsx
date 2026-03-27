@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react'
 
+import { FieldLabel, HelpTip } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
-import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
+import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { buildVisualTransformFilter } from '@/lib/video/visualFilters'
 import {
@@ -16,6 +17,7 @@ import {
   FFMPEG_MP4_TAIL,
   getFfmpeg,
   OUT_MP4,
+  subscribeFfmpegProgress,
 } from '@/lib/video/ffmpegRun'
 import type { StudioTool } from '@/lib/search-params'
 
@@ -32,9 +34,8 @@ function VisualControls({
 }: {
   onProcessed: (blob: Blob) => void
 }) {
-  const { file } = useStudioMedia()
-  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
-  /** Grados; decimales permiten cambios casi imperceptibles (p. ej. 0,05°). */
+  const { file, activeId, getFileById } = useStudioMedia()
+  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
   const [rotationDeg, setRotationDeg] = useState(0.5)
 
   const finePresets = [0.05, 0.1, 0.25, 0.5, 1, -0.1, -0.25] as const
@@ -44,70 +45,91 @@ function VisualControls({
   const [hint, setHint] = useState<string | null>(null)
 
   const runTransform = useCallback(async () => {
-    if (!file) return
+    if (!file || !activeId) return
+    try {
+      buildVisualTransformFilter(rotationDeg, flipH)
+    } catch (e) {
+      setError(formatErr(e))
+      return
+    }
+    const fileId = activeId
+    const rot = rotationDeg
+    const flip = flipH
     setBusy(true)
     setError(null)
     setHint(null)
-    resetProgress()
     try {
-      let vf: string
-      try {
-        vf = buildVisualTransformFilter(rotationDeg, flipH)
-      } catch (e) {
-        setError(formatErr(e))
-        setBusy(false)
-        return
-      }
-      assertVideoSize(file)
-      const ff = await getFfmpeg()
-      const unsub = bindProgress(ff)
-      try {
-        const inName = await ffmpegWriteInput(ff, file)
-        const code = await ff.exec([
-          '-i',
-          inName,
-          '-vf',
-          vf,
-          ...FFMPEG_MP4_TAIL,
-          OUT_MP4,
-        ])
-        await ffmpegCleanupInput(ff, inName)
-        if (code !== 0) {
-          throw new Error('ffmpeg no pudo aplicar la transformación.')
-        }
-        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-        onProcessed(blob)
-        setHint(
-          'Listo. Mira la pestaña «Después de procesar» y revisa la descarga.',
-        )
-      } finally {
-        unsub()
-        resetProgress()
-      }
+      const blob = await enqueue({
+        label: 'Visual — rotación / espejo',
+        fileId,
+        run: async ({ onProgress }) => {
+          const f = getFileById(fileId)
+          if (!f) throw new Error('Archivo no encontrado.')
+          assertVideoSize(f)
+          const ff = await getFfmpeg()
+          const unsub = subscribeFfmpegProgress(ff, (ratio01) => {
+            onProgress(Math.round(ratio01 * 100))
+          })
+          try {
+            const vff = buildVisualTransformFilter(rot, flip)
+            const inName = await ffmpegWriteInput(ff, f)
+            const code = await ff.exec([
+              '-i',
+              inName,
+              '-vf',
+              vff,
+              ...FFMPEG_MP4_TAIL,
+              OUT_MP4,
+            ])
+            await ffmpegCleanupInput(ff, inName)
+            if (code !== 0) {
+              throw new Error('ffmpeg no pudo aplicar la transformación.')
+            }
+            return ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+          } finally {
+            unsub()
+          }
+        },
+      })
+      onProcessed(blob)
+      setHint(
+        'Listo. Mira la pestaña «Después de procesar» y revisa la descarga.',
+      )
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
-      resetProgress()
     }
-  }, [file, onProcessed, bindProgress, resetProgress, rotationDeg, flipH])
+  }, [
+    file,
+    activeId,
+    rotationDeg,
+    flipH,
+    enqueue,
+    getFileById,
+    onProcessed,
+  ])
 
   return (
     <div className="flex max-w-lg flex-col gap-4">
       <p className="text-zinc-600 dark:text-zinc-400">
-        Rotación en grados (valores pequeños, p. ej. 0,1°–2°, apenas se notan a
-        simple vista). Opcionalmente espejo horizontal. Salida H.264/AAC.
+        Rotación en grados (valores pequeños apenas se notan). Espejo
+        horizontal opcional. El procesamiento sigue en segundo plano si cambias
+        de página; el avance aparece abajo a la derecha.
       </p>
 
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Ajustes rápidos (°) — cambios casi imperceptibles
-        </span>
+        <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          <HelpTip tip="Atajos para ángulos típicos. Los cambios muy pequeños (p. ej. 0,05°) son casi invisibles a simple vista.">
+            Ajustes rápidos (°)
+          </HelpTip>
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {finePresets.map((v) => (
             <button
               key={v}
               type="button"
+              title={`Fija la rotación a ${v}°`}
               className="cursor-pointer rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1 font-mono text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
               onClick={() => setRotationDeg(v)}
             >
@@ -117,11 +139,14 @@ function VisualControls({
         </div>
       </div>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Grados (−180 a 180; usa decimales para rotar muy poco, p. ej. 0,08)
-        </span>
+      <div className="flex flex-col gap-1">
+        <FieldLabel
+          htmlFor="visual-rotation-deg"
+          label="Grados"
+          tip="Ángulo en grados sexagesimales (−180 a 180). Usa decimales (paso 0,01) para rotar muy poco. Se convierte a radianes dentro del filtro rotate de FFmpeg."
+        />
         <input
+          id="visual-rotation-deg"
           type="number"
           min={-180}
           max={180}
@@ -130,7 +155,7 @@ function VisualControls({
           onChange={(e) => setRotationDeg(Number(e.target.value))}
           className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 font-mono text-sm dark:border-zinc-600 dark:bg-zinc-900"
         />
-      </label>
+      </div>
 
       <label className="flex cursor-pointer items-center gap-2">
         <input
@@ -138,9 +163,17 @@ function VisualControls({
           className="cursor-pointer"
           checked={flipH}
           onChange={(e) => setFlipH(e.target.checked)}
+          title="Voltea el vídeo en el eje horizontal (izquierda-derecha)."
         />
         <span className="text-sm text-zinc-800 dark:text-zinc-200">
-          Espejo horizontal
+          Espejo horizontal{' '}
+          <span
+            className="cursor-help text-zinc-400"
+            title="Equivale al filtro hflip: invierte la imagen como en un espejo."
+            aria-label="Equivale al filtro hflip: invierte la imagen como en un espejo."
+          >
+            ⓘ
+          </span>
         </span>
       </label>
 
@@ -157,14 +190,18 @@ function VisualControls({
           {hint}
         </p>
       ) : null}
-      <FfmpegProgress busy={busy} progressPct={progressPct} />
+      <FfmpegProgress
+        busy={busy}
+        progressPct={busy ? queueProgress : null}
+      />
       <Button
         type="button"
         className="w-fit cursor-pointer"
         disabled={busy}
+        title="Encola un trabajo de FFmpeg (H.264/AAC). Si hay varios trabajos, se ejecutan uno tras otro."
         onClick={() => void runTransform()}
       >
-        {busy ? 'Procesando…' : 'Aplicar y descargar MP4'}
+        {busy ? 'En cola / procesando…' : 'Aplicar y descargar MP4'}
       </Button>
     </div>
   )

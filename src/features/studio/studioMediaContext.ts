@@ -2,13 +2,28 @@ import { createContext } from 'react'
 
 import type { DownloadNameMode } from '@/lib/filename/buildDownloadFilename'
 
+export type StudioMediaItem = {
+  id: string
+  file: File
+}
+
 export type StudioMediaContextValue = {
+  items: StudioMediaItem[]
+  activeId: string | null
+  /** Active file for tools (derived). */
   file: File | null
-  setFile: (f: File | null) => void
   previewUrl: string | null
-  /** False until IndexedDB restore finishes (avoid flashing empty state). */
   mediaHydrated: boolean
-  /** Filename for downloads */
+  addFiles: (files: File[]) => void
+  removeItem: (id: string) => void
+  setActiveId: (id: string | null) => void
+  /**
+   * Replace session with a single file (single-file pickers / compat).
+   * Passing null removes the active item (or clears if none).
+   */
+  setFile: (f: File | null) => void
+  clearAll: () => void
+  getFileById: (id: string) => File | undefined
   nameMode: DownloadNameMode
   setNameMode: (m: DownloadNameMode) => void
   nameSuffix32: boolean

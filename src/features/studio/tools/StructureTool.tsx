@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react'
 
+import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
-import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -15,6 +16,7 @@ import {
   FFMPEG_MP4_TAIL,
   getFfmpeg,
   OUT_MP4,
+  subscribeFfmpegProgress,
 } from '@/lib/video/ffmpegRun'
 import type { StudioTool } from '@/lib/search-params'
 
@@ -31,8 +33,8 @@ function StructureControls({
 }: {
   onProcessed: (blob: Blob) => void
 }) {
-  const { file } = useStudioMedia()
-  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
+  const { file, activeId, getFileById } = useStudioMedia()
+  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
   const [startSec, setStartSec] = useState(0)
   const [durationSec, setDurationSec] = useState(10)
   const [busy, setBusy] = useState(false)
@@ -40,51 +42,69 @@ function StructureControls({
   const [hint, setHint] = useState<string | null>(null)
 
   const run = useCallback(async () => {
-    if (!file) return
+    if (!file || !activeId) return
     if (durationSec <= 0 || startSec < 0) {
       setError('Duración y tiempo de inicio deben ser válidos.')
       return
     }
+    const fileId = activeId
+    const ss = startSec
+    const dur = durationSec
     setBusy(true)
     setError(null)
     setHint(null)
-    resetProgress()
     try {
-      assertVideoSize(file)
-      const ff = await getFfmpeg()
-      const unsub = bindProgress(ff)
-      try {
-        const inName = await ffmpegWriteInput(ff, file)
-        const code = await ff.exec([
-          '-ss',
-          String(startSec),
-          '-i',
-          inName,
-          '-t',
-          String(durationSec),
-          ...FFMPEG_MP4_TAIL,
-          OUT_MP4,
-        ])
-        await ffmpegCleanupInput(ff, inName)
-        if (code !== 0) {
-          throw new Error(
-            'No se pudo cortar el vídeo. Prueba otros tiempos o un formato distinto.',
-          )
-        }
-        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-        onProcessed(blob)
-        setHint('Fragmento listo. Revisa la pestaña «Después de procesar».')
-      } finally {
-        unsub()
-        resetProgress()
-      }
+      const blob = await enqueue({
+        label: 'Estructura — recorte temporal',
+        fileId,
+        run: async ({ onProgress }) => {
+          const f = getFileById(fileId)
+          if (!f) throw new Error('Archivo no encontrado.')
+          assertVideoSize(f)
+          const ff = await getFfmpeg()
+          const unsub = subscribeFfmpegProgress(ff, (ratio01) => {
+            onProgress(Math.round(ratio01 * 100))
+          })
+          try {
+            const inName = await ffmpegWriteInput(ff, f)
+            const code = await ff.exec([
+              '-ss',
+              String(ss),
+              '-i',
+              inName,
+              '-t',
+              String(dur),
+              ...FFMPEG_MP4_TAIL,
+              OUT_MP4,
+            ])
+            await ffmpegCleanupInput(ff, inName)
+            if (code !== 0) {
+              throw new Error(
+                'No se pudo cortar el vídeo. Prueba otros tiempos o un formato distinto.',
+              )
+            }
+            return ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+          } finally {
+            unsub()
+          }
+        },
+      })
+      onProcessed(blob)
+      setHint('Fragmento listo. Revisa la pestaña «Después de procesar».')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
-      resetProgress()
     }
-  }, [file, startSec, durationSec, onProcessed, bindProgress, resetProgress])
+  }, [
+    file,
+    activeId,
+    startSec,
+    durationSec,
+    enqueue,
+    getFileById,
+    onProcessed,
+  ])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
@@ -92,11 +112,14 @@ function StructureControls({
         Usa el reproductor de arriba para ubicar tiempos; luego define inicio y
         duración del extracto.
       </p>
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Inicio (s)
-        </span>
+      <div className="flex flex-col gap-1">
+        <FieldLabel
+          htmlFor="struct-start"
+          label="Inicio (s)"
+          tip="Segundos desde el comienzo del archivo donde empieza el extracto (seek antes de -i)."
+        />
         <input
+          id="struct-start"
           type="number"
           min={0}
           step={0.1}
@@ -104,12 +127,15 @@ function StructureControls({
           onChange={(e) => setStartSec(Number(e.target.value))}
           className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 dark:border-zinc-600 dark:bg-zinc-900"
         />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Duración (s)
-        </span>
+      </div>
+      <div className="flex flex-col gap-1">
+        <FieldLabel
+          htmlFor="struct-dur"
+          label="Duración (s)"
+          tip="Longitud del clip de salida en segundos (-t)."
+        />
         <input
+          id="struct-dur"
           type="number"
           min={0.1}
           step={0.1}
@@ -117,7 +143,7 @@ function StructureControls({
           onChange={(e) => setDurationSec(Number(e.target.value))}
           className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 dark:border-zinc-600 dark:bg-zinc-900"
         />
-      </label>
+      </div>
       {error ? (
         <p
           role="alert"
@@ -129,14 +155,15 @@ function StructureControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
-      <FfmpegProgress busy={busy} progressPct={progressPct} />
+      <FfmpegProgress busy={busy} progressPct={busy ? queueProgress : null} />
       <Button
         type="button"
         className="w-fit cursor-pointer"
         disabled={busy}
+        title="Extrae un fragmento; re-codifica con H.264 según el preset global."
         onClick={() => void run()}
       >
-        {busy ? 'Procesando…' : 'Cortar y descargar'}
+        {busy ? 'En cola / procesando…' : 'Extraer y descargar'}
       </Button>
     </div>
   )
@@ -150,14 +177,14 @@ export function StructureTool({ tool }: StructureToolProps) {
   return (
     <StudioVideoShell
       tool={tool}
-      description="Recorte por tiempo con vista previa del archivo completo."
+      description="Recorte de fragmento por tiempo; exporta un nuevo MP4."
       compareResultUrl={processedUrl}
       onClearCompare={clearProcessed}
     >
       <StructureControls
         onProcessed={(blob) => {
           setProcessedBlob(blob)
-          download(blob, '-cut', '.mp4')
+          download(blob, '-corte', '.mp4')
         }}
       />
     </StudioVideoShell>

@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react'
 
+import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
-import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -15,10 +16,10 @@ import {
   FFMPEG_MP4_TAIL,
   getFfmpeg,
   OUT_MP4,
+  subscribeFfmpegProgress,
 } from '@/lib/video/ffmpegRun'
 import type { StudioTool } from '@/lib/search-params'
 
-/** Mute path: video-only re-encode using same defaults as `FFMPEG_MP4_TAIL`. */
 const MUTE_VIDEO_ARGS = ['-an', ...FFMPEG_MP4_TAIL] as const
 
 function formatErr(e: unknown): string {
@@ -34,8 +35,8 @@ function AudioControls({
 }: {
   onProcessed: (blob: Blob) => void
 }) {
-  const { file } = useStudioMedia()
-  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
+  const { file, activeId, getFileById } = useStudioMedia()
+  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
   const [mute, setMute] = useState(false)
   const [volume, setVolume] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -43,45 +44,55 @@ function AudioControls({
   const [hint, setHint] = useState<string | null>(null)
 
   const run = useCallback(async () => {
-    if (!file) return
+    if (!file || !activeId) return
+    const fileId = activeId
+    const m = mute
+    const vol = volume
     setBusy(true)
     setError(null)
     setHint(null)
-    resetProgress()
     try {
-      assertVideoSize(file)
-      const ff = await getFfmpeg()
-      const unsub = bindProgress(ff)
-      try {
-        const inName = await ffmpegWriteInput(ff, file)
-        const code = await ff.exec(
-          mute
-            ? ['-i', inName, ...MUTE_VIDEO_ARGS, OUT_MP4]
-            : [
-                '-i',
-                inName,
-                '-af',
-                `volume=${volume}`,
-                ...FFMPEG_MP4_TAIL,
-                OUT_MP4,
-              ],
-        )
-        await ffmpegCleanupInput(ff, inName)
-        if (code !== 0) throw new Error('ffmpeg no pudo ajustar el audio.')
-        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-        onProcessed(blob)
-        setHint('Listo. Comprueba el resultado en la otra pestaña.')
-      } finally {
-        unsub()
-        resetProgress()
-      }
+      const blob = await enqueue({
+        label: m ? 'Audio — silenciar' : 'Audio — volumen',
+        fileId,
+        run: async ({ onProgress }) => {
+          const f = getFileById(fileId)
+          if (!f) throw new Error('Archivo no encontrado.')
+          assertVideoSize(f)
+          const ff = await getFfmpeg()
+          const unsub = subscribeFfmpegProgress(ff, (ratio01) => {
+            onProgress(Math.round(ratio01 * 100))
+          })
+          try {
+            const inName = await ffmpegWriteInput(ff, f)
+            const code = await ff.exec(
+              m
+                ? ['-i', inName, ...MUTE_VIDEO_ARGS, OUT_MP4]
+                : [
+                    '-i',
+                    inName,
+                    '-af',
+                    `volume=${vol}`,
+                    ...FFMPEG_MP4_TAIL,
+                    OUT_MP4,
+                  ],
+            )
+            await ffmpegCleanupInput(ff, inName)
+            if (code !== 0) throw new Error('ffmpeg no pudo ajustar el audio.')
+            return ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+          } finally {
+            unsub()
+          }
+        },
+      })
+      onProcessed(blob)
+      setHint('Listo. Comprueba el resultado en la otra pestaña.')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
-      resetProgress()
     }
-  }, [file, mute, volume, onProcessed, bindProgress, resetProgress])
+  }, [file, activeId, mute, volume, enqueue, getFileById, onProcessed])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
@@ -95,15 +106,28 @@ function AudioControls({
           className="cursor-pointer"
           checked={mute}
           onChange={(e) => setMute(e.target.checked)}
+          title="Elimina la pista de audio (-an) y re-codifica vídeo."
         />
-        <span className="text-sm">Sin audio (eliminar pista)</span>
+        <span className="text-sm">
+          Sin audio (eliminar pista){' '}
+          <span
+            className="cursor-help text-zinc-400"
+            title="No es lo mismo que volumen 0: aquí no hay pista de audio en el contenedor."
+            aria-label="No es lo mismo que volumen 0"
+          >
+            ⓘ
+          </span>
+        </span>
       </label>
       {!mute ? (
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Volumen ({volume.toFixed(2)}×)
-          </span>
+        <div className="flex flex-col gap-1">
+          <FieldLabel
+            htmlFor="audio-vol"
+            label={`Volumen (${volume.toFixed(2)}×)`}
+            tip="Filtro volume de FFmpeg: 1,0 = nivel original; 2,0 ≈ el doble de amplitud."
+          />
           <input
+            id="audio-vol"
             type="range"
             min={0.1}
             max={2.5}
@@ -112,7 +136,7 @@ function AudioControls({
             onChange={(e) => setVolume(Number(e.target.value))}
             className="cursor-pointer"
           />
-        </label>
+        </div>
       ) : null}
       {error ? (
         <p
@@ -125,14 +149,15 @@ function AudioControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
-      <FfmpegProgress busy={busy} progressPct={progressPct} />
+      <FfmpegProgress busy={busy} progressPct={busy ? queueProgress : null} />
       <Button
         type="button"
         className="w-fit cursor-pointer"
         disabled={busy}
+        title="Aplica filtros de audio y re-codifica el vídeo."
         onClick={() => void run()}
       >
-        {busy ? 'Procesando…' : 'Aplicar audio y descargar'}
+        {busy ? 'En cola / procesando…' : 'Aplicar audio y descargar'}
       </Button>
     </div>
   )

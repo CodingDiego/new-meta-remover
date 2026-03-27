@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
+import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import {
   readMetadataFromBlob,
@@ -205,14 +207,19 @@ export function MetadataTool({ tool }: MetadataToolProps) {
   const inputId = useId()
   const {
     file,
-    setFile,
+    activeId,
+    getFileById,
+    addFiles,
+    clearAll: clearStudioFiles,
     previewUrl: filePreviewUrl,
     nameMode,
     setNameMode,
     nameSuffix32,
     setNameSuffix32,
   } = useStudioMedia()
+  const { enqueue } = useStudioProcessQueue()
   const downloadWithPrefs = useStudioDownload()
+  const videoNoteRef = useRef<string | null>(null)
 
   const category = useMemo(
     () => (file ? detectCategory(file) : null),
@@ -297,7 +304,7 @@ export function MetadataTool({ tool }: MetadataToolProps) {
   }, [resultBlob, file, category])
 
   const clearAll = useCallback(() => {
-    setFile(null)
+    clearStudioFiles()
     setResultBlob(null)
     setVideoNote(null)
     setError(null)
@@ -306,12 +313,12 @@ export function MetadataTool({ tool }: MetadataToolProps) {
     setAfterMeta(null)
     setAfterError(null)
     setPreviewTab('original')
-  }, [setFile])
+  }, [clearStudioFiles])
 
   const onPickFile = useCallback(
     (list: FileList | null) => {
-      const f = list?.[0] ?? null
-      setFile(f)
+      if (!list?.length) return
+      addFiles(Array.from(list))
       setResultBlob(null)
       setVideoNote(null)
       setError(null)
@@ -319,58 +326,77 @@ export function MetadataTool({ tool }: MetadataToolProps) {
       setAfterError(null)
       setPreviewTab('original')
     },
-    [setFile],
+    [addFiles],
   )
 
   const strip = useCallback(async () => {
-    if (!file || !category) return
+    if (!file || !category || !activeId) return
+    if (category === 'unknown') {
+      setError(
+        'Este tipo de archivo no está admitido para limpieza en el cliente.',
+      )
+      return
+    }
+    const fileId = activeId
+    const randomize = addRandomized
     setError(null)
     setBusy(true)
     setResultBlob(null)
     setVideoNote(null)
     setAfterMeta(null)
     setAfterError(null)
+    videoNoteRef.current = null
     try {
-      if (category === 'unknown') {
-        setError(
-          'Este tipo de archivo no está admitido para limpieza en el cliente.',
-        )
-        return
-      }
-      if (category === 'image') {
-        const out = await stripImageMetadata(file, { addRandomized })
-        setResultBlob(out)
-        return
-      }
-      if (category === 'pdf') {
-        const out = await stripPdfMetadata(file, { addRandomized })
-        setResultBlob(out)
-        return
-      }
-      if (category === 'video') {
-        const out: StripVideoResult = await stripVideoMetadata(file)
-        setResultBlob(out.blob)
-        setVideoNote(out.note)
-        return
-      }
-      if (category === 'audio') {
-        const buf = await file.arrayBuffer()
-        setResultBlob(
-          new Blob([buf], { type: file.type || 'application/octet-stream' }),
-        )
-        setVideoNote(
-          'Audio: no se re-codifica en el navegador; se descarga una copia. Los metadatos embebidos (ID3, etc.) no se modifican aquí.',
-        )
-        return
-      }
+      const blob = await enqueue({
+        label: `Metadatos — limpieza (${CATEGORY_LABEL[category]})`,
+        fileId,
+        run: async ({ onProgress }) => {
+          const f = getFileById(fileId)
+          if (!f) throw new Error('Archivo no encontrado.')
+          const cat = detectCategory(f)
+          if (cat === 'unknown') {
+            throw new Error(
+              'Este tipo de archivo no está admitido para limpieza en el cliente.',
+            )
+          }
+          onProgress(10)
+          if (cat === 'image') {
+            const out = await stripImageMetadata(f, { addRandomized: randomize })
+            onProgress(100)
+            return out
+          }
+          if (cat === 'pdf') {
+            const out = await stripPdfMetadata(f, { addRandomized: randomize })
+            onProgress(100)
+            return out
+          }
+          if (cat === 'video') {
+            const out: StripVideoResult = await stripVideoMetadata(f)
+            videoNoteRef.current = out.note
+            onProgress(100)
+            return out.blob
+          }
+          if (cat === 'audio') {
+            const buf = await f.arrayBuffer()
+            videoNoteRef.current =
+              'Audio: no se re-codifica en el navegador; se descarga una copia. Los metadatos embebidos (ID3, etc.) no se modifican aquí.'
+            onProgress(100)
+            return new Blob([buf], {
+              type: f.type || 'application/octet-stream',
+            })
+          }
+          throw new Error('Tipo no soportado')
+        },
+      })
+      setResultBlob(blob)
+      setVideoNote(videoNoteRef.current)
+      videoNoteRef.current = null
     } catch (e) {
-      setError(
-        `No se pudo procesar el archivo: ${formatError(e)}`,
-      )
+      setError(`No se pudo procesar el archivo: ${formatError(e)}`)
     } finally {
       setBusy(false)
     }
-  }, [file, category, addRandomized])
+  }, [file, category, activeId, addRandomized, enqueue, getFileById])
 
   const retry = useCallback(() => {
     void strip()
@@ -405,15 +431,15 @@ export function MetadataTool({ tool }: MetadataToolProps) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <label
+        <FieldLabel
           htmlFor={inputId}
-          className="text-xs font-medium uppercase tracking-wide text-zinc-500"
-        >
-          Archivo
-        </label>
+          label="Archivo(s)"
+          tip="Puedes elegir varios archivos; se añaden a la sesión. El activo es el que ves en la barra superior del Studio."
+        />
         <input
           id={inputId}
           type="file"
+          multiple
           className="block w-full cursor-pointer text-zinc-900 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-zinc-300 file:bg-zinc-50 file:px-3 file:py-1.5 file:text-xs file:font-medium dark:text-zinc-100 dark:file:border-zinc-600 dark:file:bg-zinc-800"
           onChange={(e) => onPickFile(e.target.files)}
         />
@@ -518,6 +544,7 @@ export function MetadataTool({ tool }: MetadataToolProps) {
         <div className="mb-3 flex flex-wrap gap-1 rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
           <button
             type="button"
+            title="Mantiene el nombre base del archivo al descargar (con tag y extensión según herramienta)."
             className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               nameMode === 'preserve'
                 ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
@@ -529,6 +556,7 @@ export function MetadataTool({ tool }: MetadataToolProps) {
           </button>
           <button
             type="button"
+            title="Genera un nombre de archivo nuevo (legible) al descargar, útil para no reutilizar el mismo nombre."
             className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               nameMode === 'randomize'
                 ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'

@@ -1,13 +1,14 @@
 import { useCallback, useState } from 'react'
 
+import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useVideoCompareResult } from '@/features/studio/useVideoCompareResult'
 import { fetchFile } from '@ffmpeg/util'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
-import { useFfmpegJobProgress } from '@/features/studio/useFfmpegJobProgress'
 import {
   assertVideoSize,
   ffmpegCleanupInput,
@@ -16,6 +17,7 @@ import {
   FFMPEG_MP4_TAIL,
   getFfmpeg,
   OUT_MP4,
+  subscribeFfmpegProgress,
 } from '@/lib/video/ffmpegRun'
 import type { StudioTool } from '@/lib/search-params'
 
@@ -49,61 +51,71 @@ function OverlayControls({
 }: {
   onProcessed: (blob: Blob) => void
 }) {
-  const { file } = useStudioMedia()
-  const { progressPct, bindProgress, resetProgress } = useFfmpegJobProgress()
+  const { file, activeId, getFileById } = useStudioMedia()
+  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
   const [text, setText] = useState('Marca de agua')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
   const run = useCallback(async () => {
-    if (!file) return
+    if (!file || !activeId) return
     const t = text.trim()
     if (!t) {
       setError('Escribe un texto para la marca.')
       return
     }
+    const fileId = activeId
+    const label = t
     setBusy(true)
     setError(null)
     setHint(null)
-    resetProgress()
     try {
-      assertVideoSize(file)
-      const png = await watermarkPng(t)
-      const ff = await getFfmpeg()
-      const unsub = bindProgress(ff)
-      try {
-        const inName = await ffmpegWriteInput(ff, file)
-        await ff.writeFile('wm.png', await fetchFile(png))
-        const filter =
-          '[1:v]scale=iw*0.35:-1[wm];[0:v][wm]overlay=W-w-12:H-h-12'
-        const code = await ff.exec([
-          '-i',
-          inName,
-          '-i',
-          'wm.png',
-          '-filter_complex',
-          filter,
-          ...FFMPEG_MP4_TAIL,
-          OUT_MP4,
-        ])
-        await ffmpegCleanupInput(ff, inName)
-        await ff.deleteFile('wm.png').catch(() => {})
-        if (code !== 0) throw new Error('ffmpeg no pudo superponer la imagen.')
-        const blob = await ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
-        onProcessed(blob)
-        setHint('Marca aplicada. Revisa la pestaña «Después de procesar».')
-      } finally {
-        unsub()
-        resetProgress()
-      }
+      const blob = await enqueue({
+        label: 'Capas — marca de agua',
+        fileId,
+        run: async ({ onProgress }) => {
+          const f = getFileById(fileId)
+          if (!f) throw new Error('Archivo no encontrado.')
+          assertVideoSize(f)
+          const png = await watermarkPng(label)
+          onProgress(0)
+          const ff = await getFfmpeg()
+          const unsub = subscribeFfmpegProgress(ff, (ratio01) => {
+            onProgress(Math.round(ratio01 * 100))
+          })
+          try {
+            const inName = await ffmpegWriteInput(ff, f)
+            await ff.writeFile('wm.png', await fetchFile(png))
+            const filter =
+              '[1:v]scale=iw*0.35:-1[wm];[0:v][wm]overlay=W-w-12:H-h-12'
+            const code = await ff.exec([
+              '-i',
+              inName,
+              '-i',
+              'wm.png',
+              '-filter_complex',
+              filter,
+              ...FFMPEG_MP4_TAIL,
+              OUT_MP4,
+            ])
+            await ffmpegCleanupInput(ff, inName)
+            await ff.deleteFile('wm.png').catch(() => {})
+            if (code !== 0) throw new Error('ffmpeg no pudo superponer la imagen.')
+            return ffmpegReadOut(ff, OUT_MP4, 'video/mp4')
+          } finally {
+            unsub()
+          }
+        },
+      })
+      onProcessed(blob)
+      setHint('Marca aplicada. Revisa la pestaña «Después de procesar».')
     } catch (e) {
       setError(formatErr(e))
     } finally {
       setBusy(false)
-      resetProgress()
     }
-  }, [file, text, onProcessed, bindProgress, resetProgress])
+  }, [file, activeId, text, enqueue, getFileById, onProcessed])
 
   return (
     <div className="flex max-w-md flex-col gap-4">
@@ -111,17 +123,20 @@ function OverlayControls({
         El texto se dibuja en una banda y se superpone al vídeo; compara el
         resultado en la pestaña.
       </p>
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Texto
-        </span>
+      <div className="flex flex-col gap-1">
+        <FieldLabel
+          htmlFor="overlay-text"
+          label="Texto"
+          tip="Se genera un PNG en memoria y se compone con `overlay` en la esquina inferior derecha."
+        />
         <input
+          id="overlay-text"
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
           className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 dark:border-zinc-600 dark:bg-zinc-900"
         />
-      </label>
+      </div>
       {error ? (
         <p
           role="alert"
@@ -133,14 +148,15 @@ function OverlayControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
-      <FfmpegProgress busy={busy} progressPct={progressPct} />
+      <FfmpegProgress busy={busy} progressPct={busy ? queueProgress : null} />
       <Button
         type="button"
         className="w-fit cursor-pointer"
         disabled={busy}
+        title="Genera PNG con canvas y lo encola con FFmpeg."
         onClick={() => void run()}
       >
-        {busy ? 'Procesando…' : 'Aplicar marca y descargar'}
+        {busy ? 'En cola / procesando…' : 'Aplicar marca y descargar'}
       </Button>
     </div>
   )
