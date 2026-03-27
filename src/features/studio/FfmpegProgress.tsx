@@ -1,18 +1,30 @@
 /**
- * Progress UI for ffmpeg.wasm jobs. When `progressPct` is null while busy,
- * shows an indeterminate bar (browser support varies).
+ * Progress UI for studio jobs (FFmpeg and others). When `active` and `progressPct`
+ * is null while running, shows an indeterminate bar (browser support varies).
  */
 export function FfmpegProgress({
-  busy,
+  active,
   progressPct,
+  title = 'Procesando vídeo con FFmpeg',
+  headline,
+  detail,
+  queuePosition,
 }: {
-  busy: boolean
+  active: boolean
   /** 0–100, or null while running but before first progress tick */
   progressPct: number | null
+  title?: string
+  /** Primary line (e.g. job label or "En cola") */
+  headline?: string | null
+  /** Secondary line (e.g. queued job labels) */
+  detail?: string | null
+  /** 0-based index in the waiting queue, for context */
+  queuePosition?: number
 }) {
-  if (!busy) return null
+  if (!active) return null
 
   const determinate = progressPct !== null
+  const primary = headline ?? title
 
   return (
     <div
@@ -21,12 +33,16 @@ export function FfmpegProgress({
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-        <span className="font-medium text-zinc-800 dark:text-zinc-200">
-          Procesando vídeo con FFmpeg
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+        <span className="min-w-0 font-medium text-zinc-800 dark:text-zinc-200">
+          {primary}
         </span>
-        <span className="tabular-nums">
-          {determinate ? `${progressPct}%` : 'Iniciando…'}
+        <span className="shrink-0 tabular-nums">
+          {determinate
+            ? `${progressPct}%`
+            : queuePosition != null && queuePosition >= 0
+              ? `Pos. cola ${queuePosition + 1}`
+              : 'Iniciando…'}
         </span>
       </div>
       <progress
@@ -34,10 +50,16 @@ export function FfmpegProgress({
         max={100}
         value={determinate ? progressPct : undefined}
       />
-      <p className="mt-2 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
-        El porcentaje es orientativo (depende del códec y la duración). Puede
-        quedarse en 0% unos segundos al cargar el archivo en memoria.
-      </p>
+      {detail ? (
+        <p className="mt-2 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+          {detail}
+        </p>
+      ) : (
+        <p className="mt-2 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+          El porcentaje es orientativo (depende del códec y la duración). Puede
+          quedarse en 0% unos segundos al cargar el archivo en memoria.
+        </p>
+      )}
     </div>
   )
 }

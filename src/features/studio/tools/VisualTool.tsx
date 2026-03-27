@@ -1,5 +1,10 @@
 import { useCallback, useState } from 'react'
 
+import {
+  useFileJobBlock,
+  useFileProcessingUi,
+} from '@/features/studio/useStudioFileJobs'
+
 import { FieldLabel, HelpTip } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
@@ -36,12 +41,13 @@ function VisualControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
-  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
+  const { enqueue } = useStudioProcessQueue()
+  const jobBlocked = useFileJobBlock(activeId, 'visual')
+  const jobUi = useFileProcessingUi(activeId)
   const [rotationDeg, setRotationDeg] = usePerMediaState(activeId, 0.5)
 
   const finePresets = [0.05, 0.1, 0.25, 0.5, 1, -0.1, -0.25] as const
   const [flipH, setFlipH] = usePerMediaState(activeId, false)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -56,11 +62,11 @@ function VisualControls({
     const fileId = activeId
     const rot = rotationDeg
     const flip = flipH
-    setBusy(true)
     setError(null)
     setHint(null)
     try {
       const blob = await enqueue({
+        kind: 'visual',
         label: 'Visual — rotación / espejo',
         fileId,
         run: async ({ onProgress }) => {
@@ -98,8 +104,6 @@ function VisualControls({
       )
     } catch (e) {
       setError(formatErr(e))
-    } finally {
-      setBusy(false)
     }
   }, [
     file,
@@ -192,17 +196,26 @@ function VisualControls({
         </p>
       ) : null}
       <FfmpegProgress
-        busy={busy}
-        progressPct={busy ? queueProgress : null}
+        active={jobUi.showProgressUi}
+        progressPct={jobUi.barPct}
+        headline={jobUi.headline}
+        detail={
+          jobUi.runningThisFile ? null : jobUi.detail ?? undefined
+        }
+        queuePosition={
+          !jobUi.runningThisFile && jobUi.globalPosition >= 0
+            ? jobUi.globalPosition
+            : undefined
+        }
       />
       <Button
         type="button"
         className="w-fit cursor-pointer"
-        disabled={busy}
+        disabled={jobBlocked}
         title="Encola un trabajo de FFmpeg (H.264/AAC). Si hay varios trabajos, se ejecutan uno tras otro."
         onClick={() => void runTransform()}
       >
-        {busy ? 'En cola / procesando…' : 'Aplicar y descargar MP4'}
+        {jobBlocked ? 'En cola / procesando…' : 'Aplicar y descargar MP4'}
       </Button>
     </div>
   )

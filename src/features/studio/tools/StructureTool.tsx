@@ -1,5 +1,9 @@
 import { useCallback, useState } from 'react'
 
+import {
+  useFileJobBlock,
+  useFileProcessingUi,
+} from '@/features/studio/useStudioFileJobs'
 import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
@@ -35,10 +39,11 @@ function StructureControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
-  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
+  const { enqueue } = useStudioProcessQueue()
+  const jobBlocked = useFileJobBlock(activeId, 'structure')
+  const jobUi = useFileProcessingUi(activeId)
   const [startSec, setStartSec] = usePerMediaState(activeId, 0)
   const [durationSec, setDurationSec] = usePerMediaState(activeId, 10)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -51,11 +56,11 @@ function StructureControls({
     const fileId = activeId
     const ss = startSec
     const dur = durationSec
-    setBusy(true)
     setError(null)
     setHint(null)
     try {
       const blob = await enqueue({
+        kind: 'structure',
         label: 'Estructura — recorte temporal',
         fileId,
         run: async ({ onProgress }) => {
@@ -94,8 +99,6 @@ function StructureControls({
       setHint('Fragmento listo. Revisa la pestaña «Después de procesar».')
     } catch (e) {
       setError(formatErr(e))
-    } finally {
-      setBusy(false)
     }
   }, [
     file,
@@ -156,15 +159,25 @@ function StructureControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
-      <FfmpegProgress busy={busy} progressPct={busy ? queueProgress : null} />
+      <FfmpegProgress
+        active={jobUi.showProgressUi}
+        progressPct={jobUi.barPct}
+        headline={jobUi.headline}
+        detail={jobUi.runningThisFile ? null : jobUi.detail ?? undefined}
+        queuePosition={
+          !jobUi.runningThisFile && jobUi.globalPosition >= 0
+            ? jobUi.globalPosition
+            : undefined
+        }
+      />
       <Button
         type="button"
         className="w-fit cursor-pointer"
-        disabled={busy}
+        disabled={jobBlocked}
         title="Extrae un fragmento; re-codifica con H.264 según el preset global."
         onClick={() => void run()}
       >
-        {busy ? 'En cola / procesando…' : 'Extraer y descargar'}
+        {jobBlocked ? 'En cola / procesando…' : 'Extraer y descargar'}
       </Button>
     </div>
   )

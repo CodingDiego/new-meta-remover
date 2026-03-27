@@ -1,5 +1,9 @@
 import { useCallback, useState } from 'react'
 
+import {
+  useFileJobBlock,
+  useFileProcessingUi,
+} from '@/features/studio/useStudioFileJobs'
 import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
@@ -35,10 +39,11 @@ function ColorControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
-  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
+  const { enqueue } = useStudioProcessQueue()
+  const jobBlocked = useFileJobBlock(activeId, 'color')
+  const jobUi = useFileProcessingUi(activeId)
   const [brightness, setBrightness] = usePerMediaState(activeId, 0.08)
   const [contrast, setContrast] = usePerMediaState(activeId, 1.05)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -47,11 +52,11 @@ function ColorControls({
     const fileId = activeId
     const b = brightness
     const c = contrast
-    setBusy(true)
     setError(null)
     setHint(null)
     try {
       const blob = await enqueue({
+        kind: 'color',
         label: 'Color — brillo / contraste',
         fileId,
         run: async ({ onProgress }) => {
@@ -85,8 +90,6 @@ function ColorControls({
       setHint('Listo. Revisa la pestaña «Después de procesar».')
     } catch (e) {
       setError(formatErr(e))
-    } finally {
-      setBusy(false)
     }
   }, [file, activeId, brightness, contrast, enqueue, getFileById, onProcessed])
 
@@ -137,15 +140,25 @@ function ColorControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
-      <FfmpegProgress busy={busy} progressPct={busy ? queueProgress : null} />
+      <FfmpegProgress
+        active={jobUi.showProgressUi}
+        progressPct={jobUi.barPct}
+        headline={jobUi.headline}
+        detail={jobUi.runningThisFile ? null : jobUi.detail ?? undefined}
+        queuePosition={
+          !jobUi.runningThisFile && jobUi.globalPosition >= 0
+            ? jobUi.globalPosition
+            : undefined
+        }
+      />
       <Button
         type="button"
         className="w-fit cursor-pointer"
-        disabled={busy}
+        disabled={jobBlocked}
         title="Encola un trabajo de FFmpeg con el filtro eq."
         onClick={() => void run()}
       >
-        {busy ? 'En cola / procesando…' : 'Aplicar color y descargar'}
+        {jobBlocked ? 'En cola / procesando…' : 'Aplicar color y descargar'}
       </Button>
     </div>
   )

@@ -14,13 +14,24 @@ import {
 import {
   StudioProcessQueueContext,
   type EnqueueProcessJobArgs,
+  type ProcessJobInfo,
   type StudioProcessQueueContextValue,
 } from '@/features/studio/studioProcessQueueContext'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 
 type Queued = EnqueueProcessJobArgs & {
+  jobId: string
   resolve: (blob: Blob) => void
   reject: (e: unknown) => void
+}
+
+function toInfo(j: Queued): ProcessJobInfo {
+  return {
+    jobId: j.jobId,
+    fileId: j.fileId,
+    label: j.label,
+    kind: j.kind,
+  }
 }
 
 export function StudioProcessQueueProvider({
@@ -32,15 +43,22 @@ export function StudioProcessQueueProvider({
   const queueRef = useRef<Queued[]>([])
   const drainingRef = useRef(false)
 
-  const [queuedCount, setQueuedCount] = useState(0)
-  const [runningLabel, setRunningLabel] = useState<string | null>(null)
+  const [queuedJobs, setQueuedJobs] = useState<ProcessJobInfo[]>([])
+  const [runningJob, setRunningJob] = useState<ProcessJobInfo | null>(null)
   const [progressPct, setProgressPct] = useState<number | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
   const [lastOutput, setLastOutput] = useState<{
+    jobId: string
+    fileId: string
+    kind: EnqueueProcessJobArgs['kind']
     label: string
     blob: Blob
     mime: string
   } | null>(null)
+
+  const syncQueuedFromRef = useCallback(() => {
+    setQueuedJobs(queueRef.current.map(toInfo))
+  }, [])
 
   const drain = useCallback(async () => {
     if (drainingRef.current) return
@@ -48,15 +66,18 @@ export function StudioProcessQueueProvider({
     try {
       while (queueRef.current.length > 0) {
         const job = queueRef.current.shift()!
-        setQueuedCount(queueRef.current.length)
+        syncQueuedFromRef()
+        const info = toInfo(job)
         const file = getFileById(job.fileId)
         if (!file) {
-          const err = new Error('Archivo no encontrado (¿lo quitaste de la lista?)')
+          const err = new Error(
+            'Archivo no encontrado (¿lo quitaste de la lista?)',
+          )
           setLastError(err.message)
           job.reject(err)
           continue
         }
-        setRunningLabel(job.label)
+        setRunningJob(info)
         setProgressPct(0)
         setLastError(null)
         await idbPutProcessingFile(file)
@@ -65,7 +86,14 @@ export function StudioProcessQueueProvider({
             onProgress: (p) => setProgressPct(p),
           })
           const mime = blob.type || 'application/octet-stream'
-          setLastOutput({ label: job.label, blob, mime })
+          setLastOutput({
+            jobId: job.jobId,
+            fileId: job.fileId,
+            kind: job.kind,
+            label: job.label,
+            blob,
+            mime,
+          })
           job.resolve(blob)
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
@@ -74,46 +102,70 @@ export function StudioProcessQueueProvider({
         } finally {
           await idbRemoveProcessingFile()
           setProgressPct(null)
-          setRunningLabel(null)
+          setRunningJob(null)
         }
       }
     } finally {
       drainingRef.current = false
-      setQueuedCount(queueRef.current.length)
+      syncQueuedFromRef()
     }
-  }, [getFileById])
+  }, [getFileById, syncQueuedFromRef])
 
   const enqueue = useCallback(
     (args: EnqueueProcessJobArgs) => {
       return new Promise<Blob>((resolve, reject) => {
-        queueRef.current.push({ ...args, resolve, reject })
-        setQueuedCount(queueRef.current.length)
+        const jobId = crypto.randomUUID()
+        queueRef.current.push({ ...args, jobId, resolve, reject })
+        syncQueuedFromRef()
         void drain()
       })
     },
-    [drain],
+    [drain, syncQueuedFromRef],
+  )
+
+  const reorderQueuedJobs = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      const q = queueRef.current
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= q.length ||
+        toIndex >= q.length
+      ) {
+        return
+      }
+      const [removed] = q.splice(fromIndex, 1)
+      q.splice(toIndex, 0, removed)
+      syncQueuedFromRef()
+    },
+    [syncQueuedFromRef],
   )
 
   const dismissLastOutput = useCallback(() => setLastOutput(null), [])
 
   const value = useMemo(
     (): StudioProcessQueueContextValue => ({
-      queuedCount,
-      runningLabel,
+      queuedJobs,
+      runningJob,
       progressPct,
       lastError,
+      queuedCount: queuedJobs.length,
+      runningLabel: runningJob?.label ?? null,
       enqueue,
       lastOutput,
       dismissLastOutput,
+      reorderQueuedJobs,
     }),
     [
-      queuedCount,
-      runningLabel,
+      queuedJobs,
+      runningJob,
       progressPct,
       lastError,
       enqueue,
       lastOutput,
       dismissLastOutput,
+      reorderQueuedJobs,
     ],
   )
 

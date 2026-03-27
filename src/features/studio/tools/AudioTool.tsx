@@ -1,5 +1,9 @@
 import { useCallback, useState } from 'react'
 
+import {
+  useFileJobBlock,
+  useFileProcessingUi,
+} from '@/features/studio/useStudioFileJobs'
 import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { StudioVideoShell } from '@/features/studio/StudioVideoShell'
@@ -37,10 +41,11 @@ function AudioControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
-  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
+  const { enqueue } = useStudioProcessQueue()
+  const jobBlocked = useFileJobBlock(activeId, 'audio')
+  const jobUi = useFileProcessingUi(activeId)
   const [mute, setMute] = usePerMediaState(activeId, false)
   const [volume, setVolume] = usePerMediaState(activeId, 1)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -49,11 +54,11 @@ function AudioControls({
     const fileId = activeId
     const m = mute
     const vol = volume
-    setBusy(true)
     setError(null)
     setHint(null)
     try {
       const blob = await enqueue({
+        kind: 'audio',
         label: m ? 'Audio — silenciar' : 'Audio — volumen',
         fileId,
         run: async ({ onProgress }) => {
@@ -90,8 +95,6 @@ function AudioControls({
       setHint('Listo. Comprueba el resultado en la otra pestaña.')
     } catch (e) {
       setError(formatErr(e))
-    } finally {
-      setBusy(false)
     }
   }, [file, activeId, mute, volume, enqueue, getFileById, onProcessed])
 
@@ -150,15 +153,25 @@ function AudioControls({
       {hint ? (
         <p className="text-sm text-emerald-700 dark:text-emerald-300">{hint}</p>
       ) : null}
-      <FfmpegProgress busy={busy} progressPct={busy ? queueProgress : null} />
+      <FfmpegProgress
+        active={jobUi.showProgressUi}
+        progressPct={jobUi.barPct}
+        headline={jobUi.headline}
+        detail={jobUi.runningThisFile ? null : jobUi.detail ?? undefined}
+        queuePosition={
+          !jobUi.runningThisFile && jobUi.globalPosition >= 0
+            ? jobUi.globalPosition
+            : undefined
+        }
+      />
       <Button
         type="button"
         className="w-fit cursor-pointer"
-        disabled={busy}
+        disabled={jobBlocked}
         title="Aplica filtros de audio y re-codifica el vídeo."
         onClick={() => void run()}
       >
-        {busy ? 'En cola / procesando…' : 'Aplicar audio y descargar'}
+        {jobBlocked ? 'En cola / procesando…' : 'Aplicar audio y descargar'}
       </Button>
     </div>
   )

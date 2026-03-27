@@ -153,47 +153,77 @@ export function StudioPage() {
             </div>
           </div>
 
-          <div className="lg:w-56">
-            <button
-              type="button"
-              onClick={() => setShowDiagnostics((v) => !v)}
-              className="mb-2 w-full rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3 py-2 text-left text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200"
-            >
-              {showDiagnostics ? '▼' : '▶'} Estado & URL
-            </button>
-            <Activity
-              mode={showDiagnostics ? 'visible' : 'hidden'}
-              name="studio-diagnostics"
-            >
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-400">
-                <p className="mb-2 font-medium text-zinc-500">nuqs (compartido)</p>
-                <dl className="grid gap-2 sm:grid-cols-1">
-                  <div>
-                    <dt className="text-zinc-600">tool</dt>
-                    <dd className="font-mono text-emerald-300/90">{tool}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-zinc-600">job</dt>
-                    <dd className="break-all font-mono text-zinc-300">
-                      {jobId ?? '—'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-zinc-600">clip</dt>
-                    <dd className="font-mono text-zinc-300">{clip ?? '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-zinc-600">panel</dt>
-                    <dd className="font-mono text-zinc-300">{panel ?? '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-zinc-600">zoom</dt>
-                    <dd className="font-mono text-zinc-300">{zoom}</dd>
-                  </div>
-                </dl>
-              </div>
-            </Activity>
-          </div>
+          <aside className="lg:w-64 xl:w-72 lg:shrink-0">
+            <div className="rounded-2xl border border-zinc-800/90 bg-zinc-900/50 p-1.5 shadow-inner lg:sticky lg:top-24">
+              <button
+                type="button"
+                onClick={() => setShowDiagnostics((v) => !v)}
+                aria-expanded={showDiagnostics}
+                className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors ${
+                  showDiagnostics
+                    ? 'bg-zinc-800 text-zinc-100 shadow-inner'
+                    : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100'
+                }`}
+              >
+                <span>Estado & URL</span>
+                <span className="text-xs text-zinc-500" aria-hidden>
+                  {showDiagnostics ? '▼' : '▶'}
+                </span>
+              </button>
+              <Activity
+                mode={showDiagnostics ? 'visible' : 'hidden'}
+                name="studio-diagnostics"
+              >
+                <div className="mt-1 border-t border-zinc-800/90 px-2 py-3 text-xs text-zinc-400">
+                  <p className="mb-3 font-medium text-zinc-500">
+                    Parámetros en la URL (nuqs)
+                  </p>
+                  <dl className="grid gap-3">
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-zinc-600">
+                        tool
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm text-emerald-300/90">
+                        {tool}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-zinc-600">
+                        job
+                      </dt>
+                      <dd className="mt-0.5 break-all font-mono text-sm text-zinc-300">
+                        {jobId ?? '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-zinc-600">
+                        clip
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm text-zinc-300">
+                        {clip ?? '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-zinc-600">
+                        panel
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm text-zinc-300">
+                        {panel ?? '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-zinc-600">
+                        zoom
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm text-zinc-300">
+                        {zoom}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </Activity>
+            </div>
+          </aside>
         </div>
       </div>
     </div>

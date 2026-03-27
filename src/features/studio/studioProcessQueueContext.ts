@@ -1,10 +1,27 @@
 import { createContext } from 'react'
 
+/** Identifies which tool enqueued a job (for UI + blocking duplicate ops per file). */
+export type ProcessJobKind =
+  | 'metadata'
+  | 'visual'
+  | 'color'
+  | 'structure'
+  | 'audio'
+  | 'overlays'
+  | 'encode'
+
+export type ProcessJobInfo = {
+  jobId: string
+  fileId: string
+  label: string
+  kind: ProcessJobKind
+}
+
 export type ProcessJobProgress = {
-  /** Queued jobs ahead of the running one (not including running). */
-  queuedCount: number
-  /** Currently running job label, if any. */
-  runningLabel: string | null
+  /** Snapshot of jobs waiting (FIFO). Excludes the one currently running. */
+  queuedJobs: ProcessJobInfo[]
+  /** Job currently executing, if any. */
+  runningJob: ProcessJobInfo | null
   /** 0–100 while running, null if idle. */
   progressPct: number | null
   /** Last error message from a failed job. */
@@ -12,6 +29,7 @@ export type ProcessJobProgress = {
 }
 
 export type EnqueueProcessJobArgs = {
+  kind: ProcessJobKind
   label: string
   fileId: string
   /**
@@ -23,11 +41,24 @@ export type EnqueueProcessJobArgs = {
 }
 
 export type StudioProcessQueueContextValue = ProcessJobProgress & {
+  /** @deprecated use `queuedJobs.length` */
+  queuedCount: number
+  /** @deprecated use `runningJob?.label` */
+  runningLabel: string | null
   /** Resolves with the output blob when this job finishes (even if you navigated away). */
   enqueue: (args: EnqueueProcessJobArgs) => Promise<Blob>
   /** Last finished job output (e.g. if you navigated away during encode). */
-  lastOutput: { label: string; blob: Blob; mime: string } | null
+  lastOutput: {
+    jobId: string
+    fileId: string
+    kind: ProcessJobKind
+    label: string
+    blob: Blob
+    mime: string
+  } | null
   dismissLastOutput: () => void
+  /** Reorder waiting jobs only (`from`/`to` indices into `queuedJobs`). No-op if invalid. */
+  reorderQueuedJobs: (fromIndex: number, toIndex: number) => void
 }
 
 export const StudioProcessQueueContext =

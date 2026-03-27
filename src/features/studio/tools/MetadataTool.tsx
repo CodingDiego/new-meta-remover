@@ -2,6 +2,11 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
+import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
+import {
+  useFileJobBlock,
+  useFileProcessingUi,
+} from '@/features/studio/useStudioFileJobs'
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
 import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 import { useStudioDownload } from '@/features/studio/useStudioDownload'
@@ -221,6 +226,8 @@ export function MetadataTool({ tool }: MetadataToolProps) {
   } = useStudioMedia()
   const { enqueue } = useStudioProcessQueue()
   const downloadWithPrefs = useStudioDownload()
+  const metadataJobBlocked = useFileJobBlock(activeId, 'metadata')
+  const jobUi = useFileProcessingUi(activeId)
   const videoNoteRef = useRef<string | null>(null)
 
   const category = useMemo(
@@ -231,7 +238,6 @@ export function MetadataTool({ tool }: MetadataToolProps) {
   const [resultBlob, setResultBlob] = useState<Blob | null>(null)
   const [videoNote, setVideoNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const [addRandomized, setAddRandomized] = useState(false)
   const [previewTab, setPreviewTab] = useState<'original' | 'result'>(
     'original',
@@ -342,7 +348,6 @@ export function MetadataTool({ tool }: MetadataToolProps) {
     const fileId = activeId
     const randomize = addRandomized
     setError(null)
-    setBusy(true)
     setResultBlob(null)
     setVideoNote(null)
     setAfterMeta(null)
@@ -350,6 +355,7 @@ export function MetadataTool({ tool }: MetadataToolProps) {
     videoNoteRef.current = null
     try {
       const blob = await enqueue({
+        kind: 'metadata',
         label: `Metadatos — limpieza (${CATEGORY_LABEL[category]})`,
         fileId,
         run: async ({ onProgress }) => {
@@ -395,8 +401,6 @@ export function MetadataTool({ tool }: MetadataToolProps) {
       videoNoteRef.current = null
     } catch (e) {
       setError(`No se pudo procesar el archivo: ${formatError(e)}`)
-    } finally {
-      setBusy(false)
     }
   }, [file, category, activeId, addRandomized, enqueue, getFileById])
 
@@ -535,22 +539,24 @@ export function MetadataTool({ tool }: MetadataToolProps) {
         </span>
       </label>
 
-      <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-600">
-        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          Nombre al descargar
-        </h3>
-        <p className="mb-3 text-xs text-zinc-600 dark:text-zinc-400">
-          Se usa en esta pestaña y en las herramientas de vídeo (Visual, Color,
-          Estructura, Audio, Capas, Codificar).
-        </p>
-        <div className="mb-3 flex flex-wrap gap-1 rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
+      <div className="space-y-5 rounded-xl border border-zinc-200 bg-zinc-50/40 p-4 dark:border-zinc-600 dark:bg-zinc-900/25">
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Nombre al descargar
+          </h3>
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+            Se usa en esta pestaña y en las herramientas de vídeo (Visual, Color,
+            Estructura, Audio, Capas, Codificar).
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <button
             type="button"
             title="Mantiene el nombre base del archivo al descargar (con tag y extensión según herramienta)."
-            className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors ${
               nameMode === 'preserve'
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+                : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-500'
             }`}
             onClick={() => setNameMode('preserve')}
           >
@@ -559,10 +565,10 @@ export function MetadataTool({ tool }: MetadataToolProps) {
           <button
             type="button"
             title="Genera un nombre de archivo nuevo (legible) al descargar, útil para no reutilizar el mismo nombre."
-            className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors ${
               nameMode === 'randomize'
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+                : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-500'
             }`}
             onClick={() => setNameMode('randomize')}
           >
@@ -571,10 +577,10 @@ export function MetadataTool({ tool }: MetadataToolProps) {
           <button
             type="button"
             title="Usa el texto que escribas como base del nombre (se sanitiza; sin extensión)."
-            className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors ${
               nameMode === 'custom'
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+                : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-500'
             }`}
             onClick={() => setNameMode('custom')}
           >
@@ -582,7 +588,7 @@ export function MetadataTool({ tool }: MetadataToolProps) {
           </button>
         </div>
         {nameMode === 'custom' ? (
-          <div className="mb-3 flex flex-col gap-1">
+          <div className="flex flex-col gap-2 pt-1">
             <FieldLabel
               htmlFor="download-custom-stem"
               label="Base del nombre (sin extensión)"
@@ -594,15 +600,15 @@ export function MetadataTool({ tool }: MetadataToolProps) {
               value={nameCustomStem}
               onChange={(e) => setNameCustomStem(e.target.value)}
               placeholder="p. ej. entrega-final-corte1"
-              className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
               autoComplete="off"
             />
           </div>
         ) : null}
-        <label className="flex cursor-pointer items-start gap-2">
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 bg-white/80 p-3 dark:border-zinc-600 dark:bg-zinc-900/50">
           <input
             type="checkbox"
-            className="mt-0.5 cursor-pointer"
+            className="mt-1 cursor-pointer"
             checked={nameSuffix32}
             onChange={(e) => setNameSuffix32(e.target.checked)}
           />
@@ -610,7 +616,7 @@ export function MetadataTool({ tool }: MetadataToolProps) {
             <span className="font-medium text-zinc-900 dark:text-zinc-100">
               Añadir sufijo aleatorio de 32 caracteres
             </span>
-            <span className="block text-xs text-zinc-600 dark:text-zinc-400">
+            <span className="mt-1 block text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
               Se inserta antes de la extensión (p. ej.{' '}
               <code className="font-mono text-[11px]">vacación_abc…32.mp4</code>
               ).
@@ -635,20 +641,33 @@ export function MetadataTool({ tool }: MetadataToolProps) {
         </p>
       ) : null}
 
+      <FfmpegProgress
+        active={jobUi.showProgressUi}
+        progressPct={jobUi.barPct}
+        title="Procesando archivo"
+        headline={jobUi.headline}
+        detail={jobUi.runningThisFile ? null : jobUi.detail ?? undefined}
+        queuePosition={
+          !jobUi.runningThisFile && jobUi.globalPosition >= 0
+            ? jobUi.globalPosition
+            : undefined
+        }
+      />
+
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
           className="cursor-pointer"
-          disabled={!file || busy || category === 'unknown'}
+          disabled={!file || metadataJobBlocked || category === 'unknown'}
           onClick={() => void strip()}
         >
-          {busy ? 'Procesando…' : 'Eliminar metadatos'}
+          {metadataJobBlocked ? 'Procesando…' : 'Eliminar metadatos'}
         </Button>
         <Button
           type="button"
           variant="outline"
           className="cursor-pointer"
-          disabled={!file || busy || !error}
+          disabled={!file || metadataJobBlocked || !error}
           onClick={retry}
         >
           Reintentar
@@ -657,7 +676,7 @@ export function MetadataTool({ tool }: MetadataToolProps) {
           type="button"
           variant="outline"
           className="cursor-pointer"
-          disabled={busy}
+          disabled={metadataJobBlocked}
           onClick={clearAll}
         >
           Limpiar

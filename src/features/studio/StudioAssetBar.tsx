@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { formatBytes } from '@/lib/formatBytes'
 
 import { useStudioMedia } from '@/features/studio/useStudioMedia'
+import { useStudioProcessQueue } from '@/features/studio/useStudioProcessQueue'
 
 export function StudioAssetBar() {
   const addId = useId()
@@ -17,6 +18,7 @@ export function StudioAssetBar() {
     removeItem,
     setActiveId,
   } = useStudioMedia()
+  const { runningJob, queuedJobs } = useStudioProcessQueue()
 
   if (!mediaHydrated) {
     return (
@@ -84,10 +86,12 @@ export function StudioAssetBar() {
       >
         {items.map((it) => {
           const active = it.id === activeId
+          const runningHere = runningJob?.fileId === it.id
+          const queuedHere = queuedJobs.filter((j) => j.fileId === it.id).length
           return (
             <div
               key={it.id}
-              className={`flex max-w-[min(100%,240px)] min-w-0 items-center gap-1 rounded-lg border text-xs transition-colors ${
+              className={`flex max-w-[min(100%,260px)] min-w-0 items-center gap-1 rounded-lg border text-xs transition-colors ${
                 active
                   ? 'border-emerald-500 bg-emerald-900/50 text-emerald-50'
                   : 'border-zinc-600 bg-zinc-900/50 text-zinc-300'
@@ -101,9 +105,24 @@ export function StudioAssetBar() {
                 className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left hover:bg-white/5"
                 onClick={() => setActiveId(it.id)}
               >
-                <span className="truncate font-mono">{it.file.name}</span>
-                <span className="shrink-0 text-[10px] text-zinc-500">
-                  {formatBytes(it.file.size)}
+                <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                  <span className="truncate font-mono">{it.file.name}</span>
+                  <span className="flex shrink-0 items-center gap-1.5 text-[10px] text-zinc-500">
+                    {formatBytes(it.file.size)}
+                    {runningHere ? (
+                      <span className="rounded bg-amber-500/90 px-1 py-px font-medium text-zinc-950">
+                        En curso
+                      </span>
+                    ) : null}
+                    {queuedHere > 0 ? (
+                      <span
+                        className="rounded bg-zinc-700 px-1 py-px text-zinc-200"
+                        title={`${queuedHere} trabajo${queuedHere !== 1 ? 's' : ''} en cola`}
+                      >
+                        +{queuedHere} cola
+                      </span>
+                    ) : null}
+                  </span>
                 </span>
               </button>
               <button

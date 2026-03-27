@@ -1,5 +1,9 @@
 import { useCallback, useState } from 'react'
 
+import {
+  useFileJobBlock,
+  useFileProcessingUi,
+} from '@/features/studio/useStudioFileJobs'
 import { FieldLabel } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/button'
 import { FfmpegProgress } from '@/features/studio/FfmpegProgress'
@@ -36,7 +40,9 @@ function EncodeControls({
   onProcessed: (blob: Blob) => void
 }) {
   const { file, activeId, getFileById } = useStudioMedia()
-  const { enqueue, progressPct: queueProgress } = useStudioProcessQueue()
+  const { enqueue } = useStudioProcessQueue()
+  const jobBlocked = useFileJobBlock(activeId, 'encode')
+  const jobUi = useFileProcessingUi(activeId)
   const [crf, setCrf] = usePerMediaState(
     activeId,
     Number(FFMPEG_X264_CRF_DEFAULT),
@@ -45,7 +51,6 @@ function EncodeControls({
     activeId,
     FFMPEG_X264_PRESET_DEFAULT,
   )
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -54,11 +59,11 @@ function EncodeControls({
     const fileId = activeId
     const p = preset
     const c = crf
-    setBusy(true)
     setError(null)
     setHint(null)
     try {
       const blob = await enqueue({
+        kind: 'encode',
         label: 'Codificar — H.264 / AAC',
         fileId,
         run: async ({ onProgress }) => {
@@ -109,8 +114,6 @@ function EncodeControls({
       setHint('Exportación lista. Compara calidad en la pestaña resultado.')
     } catch (e) {
       setError(formatErr(e))
-    } finally {
-      setBusy(false)
     }
   }, [file, activeId, crf, preset, enqueue, getFileById, onProcessed])
 
@@ -159,8 +162,15 @@ function EncodeControls({
         </select>
       </div>
       <FfmpegProgress
-        busy={busy}
-        progressPct={busy ? queueProgress : null}
+        active={jobUi.showProgressUi}
+        progressPct={jobUi.barPct}
+        headline={jobUi.headline}
+        detail={jobUi.runningThisFile ? null : jobUi.detail ?? undefined}
+        queuePosition={
+          !jobUi.runningThisFile && jobUi.globalPosition >= 0
+            ? jobUi.globalPosition
+            : undefined
+        }
       />
       {error ? (
         <p
@@ -176,11 +186,11 @@ function EncodeControls({
       <Button
         type="button"
         className="w-fit cursor-pointer"
-        disabled={busy}
+        disabled={jobBlocked}
         title="Encola un trabajo de re-codificación. Varios trabajos se ejecutan en orden."
         onClick={() => void run()}
       >
-        {busy ? 'En cola / codificando…' : 'Re-codificar y descargar'}
+        {jobBlocked ? 'En cola / codificando…' : 'Re-codificar y descargar'}
       </Button>
     </div>
   )
